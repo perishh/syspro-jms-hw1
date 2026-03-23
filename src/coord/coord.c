@@ -1,3 +1,4 @@
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -8,11 +9,15 @@
 #define JMS_IN "jms_in"
 #define JMS_OUT "jms_out"
 
+#define BUFFER_SIZE 4096
+
 // chmod(2)
 // TODO: Recheck (maybe just user?)
 #define MODE_RW S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH
 
-void print_usage() { printf("Usage: jms_coord -l <path> -n <jobs_pool>"); }
+void print_usage() {
+  fprintf(stderr, "Usage: jms_coord -l <path> -n <jobs_pool>\n");
+}
 
 int main(int argc, char **argv) {
   char *path = NULL;
@@ -67,4 +72,43 @@ int main(int argc, char **argv) {
     unlink(JMS_IN);
     return 1;
   }
+
+  // open(2)
+  int jms_in = open(JMS_IN, O_RDONLY);
+  if (jms_in < 0) {
+    perror("open (jms_in)");
+
+    unlink(JMS_IN);
+    unlink(JMS_OUT);
+    return 1;
+  }
+
+  // Create buffer
+  char *buffer = malloc(BUFFER_SIZE);
+  if (buffer == NULL) {
+    perror("malloc (buffer)");
+
+    close(jms_in);
+    unlink(JMS_IN);
+    unlink(JMS_OUT);
+    return 1;
+  }
+
+  // read(2)
+  ssize_t nread;
+  while ((nread = read(jms_in, buffer, BUFFER_SIZE)) > 0) {
+    printf("Received from fifo: %.*s\n", (int)nread, buffer);
+  }
+
+  if (nread < 0) {
+    perror("read (jms_in)");
+
+    close(jms_in);
+    free(buffer);
+    unlink(JMS_IN);
+    unlink(JMS_OUT);
+    return 1;
+  }
+
+  return 0;
 }
