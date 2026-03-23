@@ -7,10 +7,20 @@ INC := include
 OBJ := build/obj
 BIN := build/bin
 
+SRC_COORD = $(wildcard $(SRC)/coord/*.c)
+OBJ_COORD = $(patsubst $(SRC)/coord/%.c, $(OBJ)/coord/%.o, $(SRC_COORD))
+
 SRC_CONSOLE = $(wildcard $(SRC)/console/*.c)
 OBJ_CONSOLE = $(patsubst $(SRC)/console/%.c, $(OBJ)/console/%.o, $(SRC_CONSOLE))
 
-all: console script
+SRC_SCRIPT = $(SRC)/script/script.sh
+SH_SCRIPT = $(patsubst $(SRC)/console/%.c, $(OBJ)/console/%.o, $(SRC_CONSOLE))
+
+all: coord console script
+
+coord: $(OBJ_COORD)
+	@mkdir -p $(BIN)
+	$(CC) $(CFLAGS) -I$(INC)/coord $^ -o $(BIN)/jms_coord
 
 console: $(OBJ_CONSOLE)
 	@mkdir -p $(BIN)
@@ -20,10 +30,11 @@ $(OBJ)/%.o: $(SRC)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -I$(INC)/$(dir $*) -c $< -o $@
 
-script:
-	@chmod +x $(SRC)/script/jms_script.sh
+script: $(SRC_SCRIPT)
+	@cp $^ $(SH_SCRIPT)
+	@chmod +x $(SH_SCRIPT)
 
 clean:
 	rm -rf build/
 
-.PHONY: all clean console script
+.PHONY: all clean coord console script
