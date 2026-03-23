@@ -1,10 +1,9 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #define JMS_IN "jms_in"
 #define JMS_OUT "jms_out"
@@ -19,24 +18,24 @@ void print_usage() {
   fprintf(stderr, "Usage: jms_coord -l <path> -n <jobs_pool>\n");
 }
 
-int main(int argc, char **argv) {
-  char *path = NULL;
+int main(int argc, char** argv) {
+  char* path = NULL;
   int jobs_pool = 0;
 
   // getopt(3)
   int opt;
   while ((opt = getopt(argc, argv, "l:n:")) != -1) {
     switch (opt) {
-    case 'l':
-      path = optarg;
-      break;
-    case 'n':
-      jobs_pool = atoi(optarg);
-      break;
-    default:
-      // Empty or unknown argument
-      print_usage();
-      return 1;
+      case 'l':
+        path = optarg;
+        break;
+      case 'n':
+        jobs_pool = atoi(optarg);
+        break;
+      default:
+        // Empty or unknown argument
+        print_usage();
+        return 1;
     }
   }
 
@@ -73,6 +72,16 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  // Create buffer
+  char* buffer = malloc(BUFFER_SIZE);
+  if (buffer == NULL) {
+    perror("malloc (buffer)");
+
+    unlink(JMS_IN);
+    unlink(JMS_OUT);
+    return 1;
+  }
+
   // open(2)
   int jms_in = open(JMS_IN, O_RDONLY);
   if (jms_in < 0) {
@@ -80,17 +89,7 @@ int main(int argc, char **argv) {
 
     unlink(JMS_IN);
     unlink(JMS_OUT);
-    return 1;
-  }
-
-  // Create buffer
-  char *buffer = malloc(BUFFER_SIZE);
-  if (buffer == NULL) {
-    perror("malloc (buffer)");
-
-    close(jms_in);
-    unlink(JMS_IN);
-    unlink(JMS_OUT);
+    free(buffer);
     return 1;
   }
 
