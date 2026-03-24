@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -Wall -Wextra -Iinclude
+CFLAGS := -Wall -Wextra -Iinclude -g
 
 SRC := src
 INC := include
@@ -14,7 +14,7 @@ SRC_CONSOLE = $(wildcard $(SRC)/console/*.c)
 OBJ_CONSOLE = $(patsubst $(SRC)/console/%.c, $(OBJ)/console/%.o, $(SRC_CONSOLE))
 
 SRC_SCRIPT = $(SRC)/script/script.sh
-SH_SCRIPT = $(patsubst $(SRC)/console/%.c, $(OBJ)/console/%.o, $(SRC_CONSOLE))
+SH_SCRIPT = $(BIN)/jms_script.sh
 
 all: coord console script
 
