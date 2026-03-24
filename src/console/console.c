@@ -72,6 +72,14 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  Command* cmd = malloc(sizeof(Command) + CMD_MAX);
+  if (cmd == NULL) {
+    perror("malloc");
+    close(out);
+    free(buffer);
+    return 1;
+  }
+
   // Forward from stdin to jms_in
   // TODO: Maybe use getline?
   ssize_t nread;
@@ -97,23 +105,24 @@ int main(int argc, char** argv) {
       continue;
     }
 
-    Command cmd;
-    cmd.action = parse_action(action);
-    cmd.args[0] = '\0';
-    if (cmd.action == UNKNOWN) {
+    cmd->action = parse_action(action);
+    cmd->args[0] = '\0';
+    if (cmd->action == UNKNOWN) {
       fprintf(stderr, "Invalid command.\n");
       continue;
     }
 
+    long arg_length_with_null = 0;
     long action_length_with_null = strlen(action) + 1;
-    if ((cmd.action & ZERO_ARG_ACTIONS) != 0) {
+    if ((cmd->action & ZERO_ARG_ACTIONS) != 0) {
       if (nread > action_length_with_null) {
         // Argument not empty
         fprintf(stderr, "Unknown arguments.\n");
         continue;
       }
     } else {
-      if (nread <= action_length_with_null && cmd.action != STATUS_ALL) {
+      // TODO: Possible bug \0\0\0\0 is a valid argument
+      if (nread <= action_length_with_null && cmd->action != STATUS_ALL) {
         // Argument empty
         fprintf(stderr, "Arguments not found.\n");
         continue;
@@ -125,19 +134,23 @@ int main(int argc, char** argv) {
         continue;
       }
 
+      arg_length_with_null = nread - action_length_with_null;
+
       // Copy arguments to command
       // string_copying(7)
-      strlcpy(cmd.args, buffer + action_length_with_null,
-              nread - action_length_with_null);
+      memcpy(cmd->args, buffer + action_length_with_null, arg_length_with_null);
     }
 
-    if (write(out, &cmd, sizeof(Command)) < 0) {
+    // TODO: Maybe send command with arg length and then args
+    // (combined with getline for stdin?)
+    if (write(out, cmd, sizeof(Command) + arg_length_with_null) < 0) {
       if (errno == EPIPE) {
         fprintf(stderr, "Coordinator is no longer running.\n");
       } else {
         perror("write (jms_in)");
       }
       free(buffer);
+      free(cmd);
       close(out);
       return 1;
     }
@@ -145,6 +158,7 @@ int main(int argc, char** argv) {
 
   if (nread < 0) {
     perror("read (stdin)");
+    free(cmd);
     free(buffer);
     close(out);
     return 1;

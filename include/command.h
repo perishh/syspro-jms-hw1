@@ -19,9 +19,10 @@ typedef enum {
 
 #define ZERO_ARG_ACTIONS (SHOW_ACTIVE | SHOW_POOLS | SHOW_FINISHED | SHUTDOWN)
 
+// FAM pattern
 typedef struct {
     Action action;
-    char args[CMD_MAX];
+    char args[];
 } Command;
 
 #endif

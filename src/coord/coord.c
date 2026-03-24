@@ -4,6 +4,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <string.h>
+
+#include "command.h"
 
 #define JMS_IN "jms_in"
 #define JMS_OUT "jms_out"
@@ -93,10 +96,29 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  Command* cmd = malloc(sizeof(Command) + CMD_MAX);
+  if (cmd == NULL) {
+    perror("malloc");
+
+    close(jms_in);
+    unlink(JMS_IN);
+    unlink(JMS_OUT);
+    free(buffer);
+    return 1;
+  }
+
   // read(2)
+  // TODO: Maybe use getline?
   ssize_t nread;
-  while ((nread = read(jms_in, buffer, BUFFER_SIZE)) > 0) {
-    // TODO
+  while ((nread = read(jms_in, cmd, sizeof(Command) + CMD_MAX)) > 0) {
+    // Ensure null termination
+    // strnlen(3)
+    if(strnlen(cmd->args, CMD_MAX) == CMD_MAX) {
+      fprintf(stderr, "Invalid argument size.\n");
+      continue;
+    }
+
+    // TODO: Parse command & execute
   }
 
   if (nread < 0) {
