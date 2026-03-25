@@ -15,7 +15,12 @@ void print_usage() {
                   "<operations_file>]\n");
 }
 
+int out;
+Command *cmd = NULL;
+char *buffer = NULL;
+
 Action parse_action(const char *cmd);
+int read_commands(FILE *stream);
 
 int main(int argc, char **argv) {
   // Ignore SIGPIPE to prevent crashing when writing to closed pipe
@@ -37,8 +42,15 @@ int main(int argc, char **argv) {
       jms_out = optarg;
       break;
     case 'o':
-      operations_file = optarg;
-      break;
+      // Workaround to allow space after -o
+      if (optarg) {
+        operations_file = optarg;
+        break;
+      } else if (optind < argc && argv[optind][0] != '-') {
+        operations_file = argv[optind++];
+        break;
+      }
+      [[fallthrough]];
     default:
       // Empty or unknown argument
       print_usage();
@@ -53,7 +65,7 @@ int main(int argc, char **argv) {
   }
 
   // Open jms_in to send data to coord
-  int out = open(jms_in, O_WRONLY | O_NONBLOCK);
+  out = open(jms_in, O_WRONLY | O_NONBLOCK);
   if (out < 0) {
     if (errno == ENXIO) {
       fprintf(stderr, "Coordinator is not running.\n");
@@ -63,21 +75,54 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  Command *cmd = malloc(sizeof(Command));
+  cmd = malloc(sizeof(Command));
   if (cmd == NULL) {
     perror("malloc");
     close(out);
     return 1;
   }
 
-  // TODO: Read and send optional OPERATIONS_FILE
+  if (operations_file != NULL) {
+    FILE *ops = fopen(operations_file, "r");
+    if (ops == NULL) {
+      perror("fopen");
+      // Program can continue
+    } else {
+      if (read_commands(ops) < 0) {
+        perror("read_commands (stdin)");
 
-  // Forward from stdin to jms_in
+        free(cmd);
+        free(buffer);
+        close(out);
+        return 1;
+      }
+      fclose(ops);
+    }
+  }
+
+  // Forward stdin to jms_in
+  if (read_commands(stdin) < 0) {
+    perror("read_commands (stdin)");
+
+    free(cmd);
+    free(buffer);
+    close(out);
+    return 1;
+  }
+
+  free(cmd);
+  free(buffer);
+  close(out);
+
+  return 0;
+}
+
+int read_commands(FILE *stream) {
+  static size_t nread;
+
   // Potentially unsafe to write more than PIPE_BUF at once
-  char *buffer = NULL;
   ssize_t ret;
-  size_t nread;
-  while ((ret = getline(&buffer, &nread, stdin)) > 0) {
+  while ((ret = getline(&buffer, &nread, stream)) > 0) {
     // Parse command
     char *action = strtok(buffer, " \n");
     if (action == NULL) {
@@ -119,29 +164,14 @@ int main(int argc, char **argv) {
              0)) {
       if (errno == EPIPE) {
         fprintf(stderr, "Coordinator is no longer running.\n");
-      } else {
-        perror("write (jms_in)");
       }
-      free(buffer);
-      free(cmd);
-      close(out);
-      return 1;
+      return -1;
     }
   }
-
-  if (ret < 0) {
-    perror("read (stdin)");
-    free(cmd);
-    free(buffer);
-    close(out);
-    return 1;
-  }
-
-  free(cmd);
-  free(buffer);
-  close(out);
-
-  return 0;
+  // ferror(3)
+  // Distinguish end of file and error
+  if(feof(stream)) return 0;
+  return ret;
 }
 
 Action parse_action(const char *cmd) {
