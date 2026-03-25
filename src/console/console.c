@@ -11,52 +11,44 @@
 #define BUFFER_SIZE 4096
 
 void print_usage() {
-  fprintf(stderr,
-          "Usage: jms_console -w <jms_in> -r <jms_out> [-o "
-          "<operations_file>]\n");
+  fprintf(stderr, "Usage: jms_console -w <jms_in> -r <jms_out> [-o "
+                  "<operations_file>]\n");
 }
 
-Action parse_action(const char* cmd);
+Action parse_action(const char *cmd);
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   // Ignore SIGPIPE to prevent crashing when writing to closed pipe
   // signal(2), write(2)
   signal(SIGPIPE, SIG_IGN);
 
-  char* jms_in = NULL;
-  char* jms_out = NULL;
-  char* operations_file = NULL;
+  char *jms_in = NULL;
+  char *jms_out = NULL;
+  char *operations_file = NULL;
 
   // getopt(3)
   int opt;
   while ((opt = getopt(argc, argv, "w:r:o")) != -1) {
     switch (opt) {
-      case 'w':
-        jms_in = optarg;
-        break;
-      case 'r':
-        jms_out = optarg;
-        break;
-      case 'o':
-        operations_file = optarg;
-        break;
-      default:
-        // Empty or unknown argument
-        print_usage();
-        return 1;
+    case 'w':
+      jms_in = optarg;
+      break;
+    case 'r':
+      jms_out = optarg;
+      break;
+    case 'o':
+      operations_file = optarg;
+      break;
+    default:
+      // Empty or unknown argument
+      print_usage();
+      return 1;
     }
   }
 
   if (jms_in == NULL || jms_out == NULL) {
     // Ensure required parameters were given
     print_usage();
-    return 1;
-  }
-
-  // Allocate buffer
-  char* buffer = malloc(BUFFER_SIZE);
-  if (buffer == NULL) {
-    perror("malloc");
     return 1;
   }
 
@@ -68,52 +60,41 @@ int main(int argc, char** argv) {
     } else {
       perror("open (jms_in)");
     }
-    free(buffer);
     return 1;
   }
 
-  Command* cmd = malloc(sizeof(Command) + CMD_MAX);
+  Command *cmd = malloc(sizeof(Command));
   if (cmd == NULL) {
     perror("malloc");
     close(out);
-    free(buffer);
     return 1;
   }
 
-  // Forward from stdin to jms_in
-  // TODO: Maybe use getline?
-  ssize_t nread;
-  while ((nread = read(STDIN_FILENO, buffer, BUFFER_SIZE)) > 0) {
-    if (buffer[nread - 1] != '\0') {
-      // Input not null terminated
-      if (nread == BUFFER_SIZE) {
-        // Input probably exceeds BUFFER_SIZE, drain rest to avoid undefined
-        // behavior (only part of string being handled as command)
-        while (
-            (nread = read(STDIN_FILENO, buffer, BUFFER_SIZE) == BUFFER_SIZE &&
-                     buffer[nread - 1] != '\0')) {
-        }
-      }
-      fprintf(stderr, "Input exceeds %d char.\n", BUFFER_SIZE - 1);
-      continue;
-    }
+  // TODO: Read and send optional OPERATIONS_FILE
 
+  // Forward from stdin to jms_in
+  // Potentially unsafe to write more than PIPE_BUF at once
+  char *buffer = NULL;
+  ssize_t ret;
+  size_t nread;
+  while ((ret = getline(&buffer, &nread, stdin)) > 0) {
     // Parse command
-    char* action = strtok(buffer, " \n");
+    char *action = strtok(buffer, " \n");
     if (action == NULL) {
       fprintf(stderr, "Invalid command.\n");
       continue;
     }
 
     cmd->action = parse_action(action);
-    cmd->args[0] = '\0';
+    cmd->len = 0;
     if (cmd->action == UNKNOWN) {
       fprintf(stderr, "Invalid command.\n");
       continue;
     }
 
-    long arg_length_with_null = 0;
-    long action_length_with_null = strlen(action) + 1;
+    size_t arg_length_with_null = 0;
+    size_t action_length_with_null = strlen(action) + 1;
+
     if ((cmd->action & ZERO_ARG_ACTIONS) != 0) {
       if (nread > action_length_with_null) {
         // Argument not empty
@@ -121,29 +102,21 @@ int main(int argc, char** argv) {
         continue;
       }
     } else {
-      // TODO: Possible bug \0\0\0\0 is a valid argument
       if (nread <= action_length_with_null && cmd->action != STATUS_ALL) {
         // Argument empty
         fprintf(stderr, "Arguments not found.\n");
         continue;
       }
 
-      if (nread - action_length_with_null > CMD_MAX) {
-        // Argument exceeds CMD_MAX
-        fprintf(stderr, "Arguments exceed %d char.\n", CMD_MAX - 1);
-        continue;
-      }
-
       arg_length_with_null = nread - action_length_with_null;
-
-      // Copy arguments to command
-      // string_copying(7)
-      memcpy(cmd->args, buffer + action_length_with_null, arg_length_with_null);
+      cmd->len = arg_length_with_null - 1;
     }
 
-    // TODO: Maybe send command with arg length and then args
-    // (combined with getline for stdin?)
-    if (write(out, cmd, sizeof(Command) + arg_length_with_null) < 0) {
+    // Send command
+    if (write(out, cmd, sizeof(Command)) < 0 ||
+        (arg_length_with_null > 0 &&
+         write(out, buffer + action_length_with_null, arg_length_with_null) <
+             0)) {
       if (errno == EPIPE) {
         fprintf(stderr, "Coordinator is no longer running.\n");
       } else {
@@ -156,7 +129,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (nread < 0) {
+  if (ret < 0) {
     perror("read (stdin)");
     free(cmd);
     free(buffer);
@@ -164,10 +137,14 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  free(cmd);
+  free(buffer);
+  close(out);
+
   return 0;
 }
 
-Action parse_action(const char* cmd) {
+Action parse_action(const char *cmd) {
   if (strcmp(cmd, "submit") == 0) {
     return SUBMIT;
   }

@@ -1,9 +1,6 @@
 #ifndef COMMAND_H
 #define COMMAND_H
 
-// TODO: Maybe remove
-#define CMD_MAX 256
-
 typedef enum {
     UNKNOWN = 0,
     SUBMIT = 1,
@@ -22,6 +19,7 @@ typedef enum {
 // FAM pattern
 typedef struct {
     Action action;
+    int len;
     char args[];
 } Command;
 

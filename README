@@ -35,3 +35,5 @@ object files των πηγαίων αρχείων c τα οποία βρίσκο
 build/
 
 Το default target (all) "χτίζει" και τα 3 προγράμματα.
+
+TODO: WRITE ABOUT CMD TRANSFER PROTOCOL

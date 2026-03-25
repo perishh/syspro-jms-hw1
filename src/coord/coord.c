@@ -4,14 +4,12 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <string.h>
 
 #include "command.h"
+#include "jobs.h"
 
 #define JMS_IN "jms_in"
 #define JMS_OUT "jms_out"
-
-#define BUFFER_SIZE 4096
 
 // chmod(2)
 // TODO: Recheck (maybe just user?)
@@ -21,24 +19,24 @@ void print_usage() {
   fprintf(stderr, "Usage: jms_coord -l <path> -n <jobs_pool>\n");
 }
 
-int main(int argc, char** argv) {
-  char* path = NULL;
+int main(int argc, char **argv) {
+  char *path = NULL;
   int jobs_pool = 0;
 
   // getopt(3)
   int opt;
   while ((opt = getopt(argc, argv, "l:n:")) != -1) {
     switch (opt) {
-      case 'l':
-        path = optarg;
-        break;
-      case 'n':
-        jobs_pool = atoi(optarg);
-        break;
-      default:
-        // Empty or unknown argument
-        print_usage();
-        return 1;
+    case 'l':
+      path = optarg;
+      break;
+    case 'n':
+      jobs_pool = atoi(optarg);
+      break;
+    default:
+      // Empty or unknown argument
+      print_usage();
+      return 1;
     }
   }
 
@@ -75,61 +73,106 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  // Create buffer
-  char* buffer = malloc(BUFFER_SIZE);
-  if (buffer == NULL) {
-    perror("malloc (buffer)");
-
-    unlink(JMS_IN);
-    unlink(JMS_OUT);
-    return 1;
-  }
-
   // open(2)
-  int jms_in = open(JMS_IN, O_RDONLY);
+  int jms_in = open(JMS_IN, O_RDONLY | O_CLOEXEC);
   if (jms_in < 0) {
     perror("open (jms_in)");
 
     unlink(JMS_IN);
     unlink(JMS_OUT);
-    free(buffer);
     return 1;
   }
 
-  Command* cmd = malloc(sizeof(Command) + CMD_MAX);
+  ssize_t buffer_size = sizeof(Command);
+  Command *cmd = malloc(buffer_size);
   if (cmd == NULL) {
     perror("malloc");
-
     close(jms_in);
     unlink(JMS_IN);
     unlink(JMS_OUT);
-    free(buffer);
     return 1;
   }
 
   // read(2)
-  // TODO: Maybe use getline?
   ssize_t nread;
-  while ((nread = read(jms_in, cmd, sizeof(Command) + CMD_MAX)) > 0) {
-    // Ensure null termination
-    // strnlen(3)
-    if(strnlen(cmd->args, CMD_MAX) == CMD_MAX) {
-      fprintf(stderr, "Invalid argument size.\n");
+  while ((nread = read(jms_in, cmd, sizeof(Command))) > 0) {
+    if ((cmd->action & ZERO_ARG_ACTIONS) != 0) {
+      // Command doesn't require args
+      // TODO: Implement
       continue;
     }
 
-    // TODO: Parse command & execute
+    if (cmd->len <= 0) {
+      // TODO: Throw error, invalid argument size
+    }
+
+    // Check current buffer size and expand if needed
+    ssize_t required_space = sizeof(Command) + cmd->len + 1;
+    if (buffer_size < required_space) {
+      buffer_size = required_space;
+
+      Command *temp = cmd;
+      cmd = realloc(cmd, required_space);
+      if (cmd == NULL) {
+        perror("realloc");
+
+        free(temp);
+        close(jms_in);
+        unlink(JMS_IN);
+        unlink(JMS_OUT);
+        return 1;
+      }
+    }
+
+    // Read arguments
+    if (read(jms_in, cmd->args, cmd->len + 1) < 0) {
+      perror("read (args)");
+
+      free(cmd);
+      close(jms_in);
+      unlink(JMS_IN);
+      unlink(JMS_OUT);
+      return 1;
+    }
+
+    // Ensure null termination
+    if (cmd->args[cmd->len] != '\0') {
+      fprintf(stderr, "Received malformed arguments.\n");
+      continue;
+    }
+
+    switch (cmd->action) {
+    case SUBMIT:
+      jobs_submit(cmd->args);
+      break;
+    case STATUS:
+    case STATUS_ALL:
+    case SHOW_ACTIVE:
+    case SHOW_POOLS:
+    case SHOW_FINISHED:
+    case SUSPEND:
+    case RESUME:
+    case SHUTDOWN:
+    default:
+      fprintf(stderr, "Unknown command.\n");
+      break;
+    }
   }
 
   if (nread < 0) {
-    perror("read (jms_in)");
+    perror("read (cmd)");
 
     close(jms_in);
-    free(buffer);
+    free(cmd);
     unlink(JMS_IN);
     unlink(JMS_OUT);
     return 1;
   }
+
+  close(jms_in);
+  free(cmd);
+  unlink(JMS_IN);
+  unlink(JMS_OUT);
 
   return 0;
 }
