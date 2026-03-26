@@ -1,52 +1,34 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/epoll.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 #include "command.h"
 #include "globals.h"
-#include "jobs.h"
+#include "parser.h"
+#include "signals.h"
 
 #define JMS_IN "jms_in"
 #define JMS_OUT "jms_out"
 
+#define MAX_EVENTS 10
+
 int jobs_pool = 0;
 
-void print_usage() {
-  fprintf(stderr, "Usage: jms_coord -l <path> -n <jobs_pool>\n");
-}
+Command *cmd_buffer = NULL;
 
 int main(int argc, char **argv) {
   char *path = NULL;
 
-  // getopt(3)
-  int opt;
-  while ((opt = getopt(argc, argv, "l:n:")) != -1) {
-    switch (opt) {
-    case 'l':
-      path = optarg;
-      break;
-    case 'n':
-      jobs_pool = atoi(optarg);
-      break;
-    default:
-      // Empty or unknown argument
-      print_usage();
-      return 1;
-    }
-  }
-
-  if (path == NULL || jobs_pool <= 0) {
-    // Ensure arguments are valid
-    print_usage();
+  if (parse_arguments(argc, argv, &path, &jobs_pool) < 0) {
     return 1;
   }
 
   // Change working directory to path
   // chdir(2)
-  // TODO: Maybe not needed, possibly erroneous
   if (chdir(path) < 0) {
     perror("chdir");
     return 1;
@@ -81,9 +63,8 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  ssize_t buffer_size = sizeof(Command);
-  Command *cmd = malloc(buffer_size);
-  if (cmd == NULL) {
+  cmd_buffer = malloc(sizeof(Command));
+  if (cmd_buffer == NULL) {
     perror("malloc");
     close(jms_in);
     unlink(JMS_IN);
@@ -91,84 +72,86 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // read(2)
-  ssize_t nread;
-  while ((nread = read(jms_in, cmd, sizeof(Command))) > 0) {
-    if ((cmd->action & ZERO_ARG_ACTIONS) != 0) {
-      // Command doesn't require args
-      // TODO: Implement
-      continue;
-    }
-
-    if (cmd->len <= 0) {
-      // TODO: Throw error, invalid argument size
-    }
-
-    // Check current buffer size and expand if needed
-    ssize_t required_space = sizeof(Command) + cmd->len + 1;
-    if (buffer_size < required_space) {
-      buffer_size = required_space;
-
-      Command *temp = cmd;
-      cmd = realloc(cmd, required_space);
-      if (cmd == NULL) {
-        perror("realloc");
-
-        free(temp);
-        close(jms_in);
-        unlink(JMS_IN);
-        unlink(JMS_OUT);
-        return 1;
-      }
-    }
-
-    // Read arguments
-    if (read(jms_in, cmd->args, cmd->len + 1) < 0) {
-      perror("read (args)");
-
-      free(cmd);
-      close(jms_in);
-      unlink(JMS_IN);
-      unlink(JMS_OUT);
-      return 1;
-    }
-
-    // Ensure null termination
-    if (cmd->args[cmd->len] != '\0') {
-      fprintf(stderr, "Received malformed arguments.\n");
-      continue;
-    }
-
-    switch (cmd->action) {
-    case SUBMIT:
-      jobs_submit(cmd->args);
-      break;
-    case STATUS:
-    case STATUS_ALL:
-    case SHOW_ACTIVE:
-    case SHOW_POOLS:
-    case SHOW_FINISHED:
-    case SUSPEND:
-    case RESUME:
-    case SHUTDOWN:
-    default:
-      fprintf(stderr, "Unknown command.\n");
-      break;
-    }
-  }
-
-  if (nread < 0) {
-    perror("read (cmd)");
-
+  int signal_fd = signals_setup();
+  if (signal_fd < 0) {
+    perror("setup signals");
+    free(cmd_buffer);
     close(jms_in);
-    free(cmd);
     unlink(JMS_IN);
     unlink(JMS_OUT);
     return 1;
   }
 
+  // epoll(7), epoll_create(2)
+  int epoll_fd = epoll_create1(EPOLL_CLOEXEC);
+  if (epoll_fd < 0) {
+    close(jms_in);
+    close(signal_fd);
+    free(cmd_buffer);
+    unlink(JMS_IN);
+    unlink(JMS_OUT);
+    return 1;
+  }
+
+  struct epoll_event event;
+
+  event.events = EPOLLIN;
+  event.data.fd = signal_fd;
+  if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, signal_fd, &event) < 0) {
+    close(epoll_fd);
+    close(jms_in);
+    close(signal_fd);
+    free(cmd_buffer);
+    unlink(JMS_IN);
+    unlink(JMS_OUT);
+    return 1;
+  }
+
+  event.events = EPOLLIN;
+  event.data.fd = jms_in;
+  if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, jms_in, &event) < 0) {
+    close(epoll_fd);
+    close(jms_in);
+    close(signal_fd);
+    free(cmd_buffer);
+    unlink(JMS_IN);
+    unlink(JMS_OUT);
+    return 1;
+  }
+
+  struct epoll_event events[MAX_EVENTS];
+  for (;;) {
+    int count = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
+    if (count < 0) {
+      close(epoll_fd);
+      close(jms_in);
+      close(signal_fd);
+      free(cmd_buffer);
+      unlink(JMS_IN);
+      unlink(JMS_OUT);
+      return 1;
+    }
+    for (int i = 0; i < count; i++) {
+      if (events[i].data.fd == signal_fd) {
+        // Signal received
+        if (signals_read(signal_fd) < 0) {
+          perror("signal_fd");
+          continue;
+        }
+      } else if (events[i].data.fd == jms_in) {
+        // Command received
+        if (parse_commands(jms_in, cmd_buffer) < 0) {
+          perror("read_commands");
+          continue;
+        }
+      }
+    }
+  }
+
+  close(epoll_fd);
   close(jms_in);
-  free(cmd);
+  close(signal_fd);
+  free(cmd_buffer);
   unlink(JMS_IN);
   unlink(JMS_OUT);
 

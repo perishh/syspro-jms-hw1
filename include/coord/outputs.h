@@ -3,7 +3,7 @@
 
 #include <time.h>
 
-int cd_to_outputs(int id, time_t timestamp);
-int redirect_outputs(int id);
+int outputs_cd(int id, time_t timestamp);
+int outputs_redirect(int id);
 
 #endif
