@@ -3,14 +3,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
 #include "globals.h"
+#include "outputs.h"
 #include "list.h"
-
-#define DATETIME_SIZE 16 // Including \0
 
 int count_words(const char *args);
 
@@ -28,50 +26,6 @@ typedef struct {
 } Pool;
 
 LinkedList pools;
-
-int cd_to_outputs(int id, time_t timestamp) {
-  char *buffer = malloc(64);
-  if (buffer == NULL) {
-    return -1;
-  }
-
-  // getpid(2)
-  pid_t pid = getpid();
-
-  // printf(3)
-  int base;
-  if ((base = snprintf(buffer, 64 - DATETIME_SIZE, "outputs_%d_%d_", id,
-                       pid)) >= 64 - DATETIME_SIZE) {
-    free(buffer);
-    return -1;
-  }
-
-  // strftime(3)
-  // Begin writing on null byte of previous snprintf
-  if (strftime(buffer + base, DATETIME_SIZE, "%Y%m%d_%H%M%S",
-               localtime(&timestamp)) == 0) {
-    free(buffer);
-    return -1;
-  }
-
-  // mkdir(2), inode(7)
-  // Grant all permissions
-  if (mkdir(buffer, S_IRWXU | S_IRWXG | S_IRWXO) < 0) {
-    free(buffer);
-    return -1;
-  }
-
-  // chdir(2)
-  if (chdir(buffer) < 0) {
-    // rmdir(2)
-    rmdir(buffer);
-    free(buffer);
-    return -1;
-  }
-
-  free(buffer);
-  return 0;
-}
 
 void jobs_init() { ll_init(&pools); }
 
@@ -121,13 +75,19 @@ int jobs_submit(char *cmd_args) {
   job.pid = fork();
   if (job.pid == 0) {
     // Child process
-    
+
     // Change working directory
     if (cd_to_outputs(job.id, job.timestamp) < 0) {
       perror("cd to outputs");
       return 1;
     }
-    
+
+    // Redirect stdout & stderr to files
+    if (redirect_outputs(job.id) < 0) {
+      perror("redirect_outputs");
+      return 1;
+    }
+
     // exec(3)
     int ret = execvp(program, argv);
     if (ret < 0) {

@@ -14,10 +14,6 @@
 
 int jobs_pool = 0;
 
-// chmod(2)
-// TODO: Recheck (maybe just user?)
-#define MODE_RW (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
-
 void print_usage() {
   fprintf(stderr, "Usage: jms_coord -l <path> -n <jobs_pool>\n");
 }
