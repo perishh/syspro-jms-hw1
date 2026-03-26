@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "jobs.h"
 
@@ -28,7 +29,7 @@ int parse_arguments(int argc, char **argv, char **path, int *jobs_pool) {
     }
   }
 
-  if (path == NULL || jobs_pool <= 0) {
+  if (*path == NULL || *jobs_pool <= 0) {
     // Ensure arguments are valid
     print_usage();
     return -1;
@@ -79,6 +80,7 @@ int parse_commands(int jms_in, Command *cmd_buffer) {
 
     switch (cmd_buffer->action) {
     case SUBMIT:
+      printf("Submitting job\n");
       jobs_submit(cmd_buffer->args);
       break;
     case STATUS:
@@ -96,6 +98,9 @@ int parse_commands(int jms_in, Command *cmd_buffer) {
   }
 
   if (nread < 0) {
+    if(errno == EAGAIN) {
+      return 0;
+    }
     return nread;
   }
 

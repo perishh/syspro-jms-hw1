@@ -10,9 +10,7 @@
 #include "globals.h"
 #include "parser.h"
 #include "signals.h"
-
-#define JMS_IN "jms_in"
-#define JMS_OUT "jms_out"
+#include "pipes.h"
 
 #define MAX_EVENTS 10
 
@@ -34,86 +32,39 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // Clear leftover files
-  // TODO: Recheck (add more)
-  unlink(JMS_IN);
-  unlink(JMS_OUT);
-
-  // Create fifos
-  // mkfifo(3)
-  if (mkfifo(JMS_IN, MODE_RW) < 0) {
-    perror("mkfifo (in)");
+    // epoll(7), epoll_create(2)
+  int epoll_fd = epoll_create1(EPOLL_CLOEXEC);
+  if (epoll_fd < 0) {
+    perror("epoll_create");
     return 1;
   }
 
-  if (mkfifo(JMS_OUT, MODE_RW) < 0) {
-    perror("mkfifo (out)");
+  int jms_in = pipes_setup(epoll_fd);
+  if(jms_in < 0) {
+    perror("pipes setup");
 
-    unlink(JMS_IN);
-    return 1;
-  }
-
-  // open(2)
-  int jms_in = open(JMS_IN, O_RDONLY | O_CLOEXEC);
-  if (jms_in < 0) {
-    perror("open (jms_in)");
-
-    unlink(JMS_IN);
-    unlink(JMS_OUT);
+    close(epoll_fd);
     return 1;
   }
 
   cmd_buffer = malloc(sizeof(Command));
   if (cmd_buffer == NULL) {
     perror("malloc");
+
+    close(epoll_fd);
     close(jms_in);
     unlink(JMS_IN);
     unlink(JMS_OUT);
     return 1;
   }
 
-  int signal_fd = signals_setup();
+  int signal_fd = signals_setup(epoll_fd);
   if (signal_fd < 0) {
     perror("setup signals");
+
     free(cmd_buffer);
     close(jms_in);
-    unlink(JMS_IN);
-    unlink(JMS_OUT);
-    return 1;
-  }
-
-  // epoll(7), epoll_create(2)
-  int epoll_fd = epoll_create1(EPOLL_CLOEXEC);
-  if (epoll_fd < 0) {
-    close(jms_in);
-    close(signal_fd);
-    free(cmd_buffer);
-    unlink(JMS_IN);
-    unlink(JMS_OUT);
-    return 1;
-  }
-
-  struct epoll_event event;
-
-  event.events = EPOLLIN;
-  event.data.fd = signal_fd;
-  if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, signal_fd, &event) < 0) {
     close(epoll_fd);
-    close(jms_in);
-    close(signal_fd);
-    free(cmd_buffer);
-    unlink(JMS_IN);
-    unlink(JMS_OUT);
-    return 1;
-  }
-
-  event.events = EPOLLIN;
-  event.data.fd = jms_in;
-  if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, jms_in, &event) < 0) {
-    close(epoll_fd);
-    close(jms_in);
-    close(signal_fd);
-    free(cmd_buffer);
     unlink(JMS_IN);
     unlink(JMS_OUT);
     return 1;
@@ -141,7 +92,7 @@ int main(int argc, char **argv) {
       } else if (events[i].data.fd == jms_in) {
         // Command received
         if (parse_commands(jms_in, cmd_buffer) < 0) {
-          perror("read_commands");
+          perror("parse_commands");
           continue;
         }
       }
