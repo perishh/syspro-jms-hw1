@@ -6,10 +6,13 @@
 #include <unistd.h>
 
 #include "command.h"
+#include "globals.h"
 #include "jobs.h"
 
 #define JMS_IN "jms_in"
 #define JMS_OUT "jms_out"
+
+int jobs_pool = 0;
 
 // chmod(2)
 // TODO: Recheck (maybe just user?)
@@ -21,7 +24,6 @@ void print_usage() {
 
 int main(int argc, char **argv) {
   char *path = NULL;
-  int jobs_pool = 0;
 
   // getopt(3)
   int opt;
