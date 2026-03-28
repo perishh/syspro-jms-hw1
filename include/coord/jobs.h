@@ -9,5 +9,7 @@ int jobs_stopped(pid_t pid);
 int jobs_continued(pid_t pid);
 int jobs_suspend(int id);
 int jobs_resume(int id);
+int jobs_status(int id);
+void jobs_status_all(int n);
 
 #endif

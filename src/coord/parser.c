@@ -1,6 +1,7 @@
 #include "parser.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -43,14 +44,20 @@ int parse_commands(int jms_in, Command *cmd_buffer) {
 
   ssize_t nread;
   while ((nread = read(jms_in, cmd_buffer, sizeof(Command))) > 0) {
-    if ((cmd_buffer->action & ZERO_ARG_ACTIONS) != 0) {
-      // Command doesn't require args
-      // TODO: Implement
+    if (cmd_buffer->len == 0) {
+      // No arguments given
+      switch (cmd_buffer->action) {
+      case STATUS_ALL:
+        jobs_status_all(INT_MAX);
+        break;
+      case SHOW_ACTIVE:
+      case SHOW_POOLS:
+      case SHOW_FINISHED:
+      case SHUTDOWN:
+      default:
+        printf("Invalid command\n");
+      }
       continue;
-    }
-
-    if (cmd_buffer->len <= 0) {
-      // TODO: Throw error, invalid argument size
     }
 
     // Check current buffer size and expand if needed
@@ -74,7 +81,7 @@ int parse_commands(int jms_in, Command *cmd_buffer) {
 
     // Ensure null termination
     if (cmd_buffer->args[cmd_buffer->len] != '\0') {
-      fprintf(stderr, "Received malformed arguments.\n");
+      printf("Malformed arguments\n");
       continue;
     }
 
@@ -88,14 +95,14 @@ int parse_commands(int jms_in, Command *cmd_buffer) {
     case RESUME:
       jobs_resume(atoi(cmd_buffer->args));
       break;
-    case STATUS:
     case STATUS_ALL:
-    case SHOW_ACTIVE:
-    case SHOW_POOLS:
-    case SHOW_FINISHED:
-    case SHUTDOWN:
+      jobs_status_all(atoi(cmd_buffer->args));
+      break;
+    case STATUS:
+      jobs_status(atoi(cmd_buffer->args));
+      break;
     default:
-      fprintf(stderr, "Unknown command.\n");
+      printf("Invalid command\n");
       break;
     }
   }

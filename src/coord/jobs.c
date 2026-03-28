@@ -1,9 +1,9 @@
 #include "jobs.h"
 
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <signal.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -152,12 +152,77 @@ void jobs_show_active() {
   // TODO
 }
 
-void jobs_status(int id) {
-  // TODO
+int jobs_status(int id) {
+  Job *job = NULL;
+  int has_finished = 0;
+
+  Pool *p;
+  FOR_EACH(pools, n) {
+    p = (Pool *)n->data;
+    for (int i = 0; i < jobs_pool; i++) {
+      if (p->jobs[i].id == id) {
+        job = &p->jobs[i];
+        break;
+      }
+    }
+  }
+
+  has_finished = 1;
+  FOR_EACH(finished, n) {
+    Job *j = (Job *)n->data;
+    if (j->id == id) {
+      job = j;
+      break;
+    }
+  }
+
+  if (job == NULL) {
+    printf("JobID %d not found\n", id);
+    return -1;
+  }
+
+  if (has_finished) {
+    printf("JobID %d Status:\tFinished\n", id);
+  } else if (job->running) {
+    time_t now = time(NULL);
+    int elapsed = now - job->timestamp;
+    printf("JobID %d Status:\tActive (running for %d sec)\n", id, elapsed);
+  } else {
+    printf("JobID %d Status:\tSuspended\n", id);
+  }
+
+  return 0;
 }
 
 void jobs_status_all(int n) {
-  // TODO
+  time_t now = time(NULL);
+
+  Job *j;
+  FOR_EACH(finished, node) {
+    j = (Job *)node->data;
+    int elapsed = now - j->timestamp;
+    if (elapsed <= n) {
+      // TODO: Maybe optimize
+      printf("JobID %d Status:\tFinished\n", j->id);
+    }
+  }
+
+  Pool *p;
+  FOR_EACH(pools, node) {
+    p = (Pool *)node->data;
+    for (int i = 0; i < jobs_pool; i++) {
+      j = &p->jobs[i];
+      int elapsed = now - j->timestamp;
+      if (elapsed <= n) {
+        if (j->running) {
+          printf("JobID %d Status:\tActive (running for %d sec)\n", j->id,
+                 elapsed);
+        } else {
+          printf("JobID %d Status:\tSuspended\n", j->id);
+        }
+      }
+    }
+  }
 }
 
 int jobs_suspend(int id) {
@@ -166,17 +231,17 @@ int jobs_suspend(int id) {
     p = (Pool *)n->data;
     for (int i = 0; i < jobs_pool; i++) {
       if (p->jobs[i].id == id) {
-        if(!p->jobs[i].running) {
+        if (!p->jobs[i].running) {
           printf("Job already suspended\n");
           return -1;
         }
 
         // kill(2)
-        if(kill(p->jobs[i].pid, SIGSTOP) < 0) {
+        if (kill(p->jobs[i].pid, SIGSTOP) < 0) {
           printf("Couldn't send signal to job\n");
           return -1;
         }
-        
+
         printf("Sent suspend signal to JobID %d\n", id);
         return 0;
       }
@@ -193,17 +258,17 @@ int jobs_resume(int id) {
     p = (Pool *)n->data;
     for (int i = 0; i < jobs_pool; i++) {
       if (p->jobs[i].id == id) {
-        if(p->jobs[i].running) {
+        if (p->jobs[i].running) {
           printf("Job already running\n");
           return -1;
         }
 
         // kill(2)
-        if(kill(p->jobs[i].pid, SIGCONT) < 0) {
+        if (kill(p->jobs[i].pid, SIGCONT) < 0) {
           printf("Couldn't send signal to job\n");
           return -1;
         }
-        
+
         printf("Sent resume signal to JobID %d\n", id);
         return 0;
       }
