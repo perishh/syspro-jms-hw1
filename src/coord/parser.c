@@ -51,8 +51,12 @@ int parse_commands(int jms_in, Command *cmd_buffer) {
         jobs_status_all(INT_MAX);
         break;
       case SHOW_ACTIVE:
-      case SHOW_POOLS:
+        jobs_show_active();
+        break;
       case SHOW_FINISHED:
+        jobs_show_finished();
+        break;
+      case SHOW_POOLS:
       case SHUTDOWN:
       default:
         printf("Invalid command\n");

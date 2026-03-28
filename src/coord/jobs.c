@@ -10,8 +10,7 @@
 #include "globals.h"
 #include "list.h"
 #include "outputs.h"
-
-int count_words(const char *args);
+#include "utils.h"
 
 int key = 1; // starts from 1 to handle invalid atoi
 
@@ -141,15 +140,32 @@ int jobs_submit(char *cmd_args) {
 }
 
 void jobs_show_finished() {
-  // TODO
+  printf("Finished jobs:\n");
+
+  Job *j;
+  FOR_EACH(finished, n) {
+    j = (Job*) n->data;
+    printf("JobID %d\n", j->id);
+  }
 }
 
 void jobs_show_pools() {
-  // TODO
+  // TODO: Does the number include suspended jobs?
 }
 
 void jobs_show_active() {
-  // TODO
+  printf("Active jobs:\n");
+
+  Pool* p;
+  FOR_EACH(pools, n) {
+    p = (Pool*) n->data;
+    for(int i = 0;i<jobs_pool;i++) {
+      Job *j = &p->jobs[i];
+      if(!IS_JOB_EMPTY(*j) && j->running) {
+        printf("JobID %d\n", j->id);
+      }
+    }
+  }
 }
 
 int jobs_status(int id) {
@@ -335,38 +351,25 @@ int jobs_exited(pid_t pid) {
 
   *finished_job = *job;
 
-  CLEAR_JOB(*job);
-  p->active--;
-
   finished_job->running = 0;
   if (ll_push(&finished, finished_job) < 0) {
     return -1;
   }
 
+  CLEAR_JOB(*job);
+  p->active--;
+
+  // TODO: Should delete pool if jobs are empty?
+
   return 0;
+}
+
+void jobs_shutdown() {
+
 }
 
 void jobs_free() {
   // TODO: Free pool & job struct memory
   ll_free(&pools);
   ll_free(&finished);
-}
-
-int count_words(const char *args) {
-  int in_delim = 1;
-  int count = 0;
-  int i = 0;
-  char current;
-  do {
-    current = args[i++];
-    if (current == ' ' || current == '\n' || current == '\0') {
-      if (!in_delim) {
-        in_delim = 1;
-        count++;
-      }
-    } else {
-      in_delim = 0;
-    }
-  } while (current != '\0');
-  return count;
 }

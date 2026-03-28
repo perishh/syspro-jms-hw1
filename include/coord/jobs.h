@@ -11,5 +11,7 @@ int jobs_suspend(int id);
 int jobs_resume(int id);
 int jobs_status(int id);
 void jobs_status_all(int n);
+void jobs_show_finished();
+void jobs_show_active();
 
 #endif
