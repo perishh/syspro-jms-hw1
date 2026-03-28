@@ -7,8 +7,8 @@
 #include <unistd.h>
 
 #include "globals.h"
-#include "outputs.h"
 #include "list.h"
+#include "outputs.h"
 
 int count_words(const char *args);
 
@@ -16,32 +16,39 @@ int key = 0;
 
 typedef struct {
   int id;
-  pid_t pid;            // 0 indicates empty slot
+  pid_t pid; // 0 indicates empty slot
+  int running;
   time_t timestamp;
 } Job;
 
-#define IS_JOB_EMPTY(job) (job.pid == 0)
+#define IS_JOB_EMPTY(job) ((job).pid == 0)
+#define CLEAR_JOB(job) ((job).pid = 0)
 
 typedef struct {
   int active;
-  Job jobs[];           // FAM
+  Job jobs[]; // FAM
 } Pool;
 
 LinkedList pools;
+LinkedList finished;
 
-void jobs_init() { ll_init(&pools); }
+void jobs_init() {
+  ll_init(&pools);
+  ll_init(&finished);
+}
 
 int jobs_add(const Job *job) {
-  Pool* pool = NULL;
-  for(Node *n = pools.front; n != NULL; n = n->next) {
-    Pool* p = (Pool*) n->data;
-    if(p->active < jobs_pool) {
+  Pool *pool = NULL;
+
+  FOR_EACH(pools, n) {
+    Pool *p = (Pool *)n->data;
+    if (p->active < jobs_pool) {
       pool = p;
       break;
     }
   }
 
-  if(pool == NULL) {
+  if (pool == NULL) {
     // Create new pool
     pool = calloc(1, sizeof(Pool) + (sizeof(Job) * jobs_pool));
     if (pool == NULL) {
@@ -54,8 +61,8 @@ int jobs_add(const Job *job) {
   }
 
   // Search for available job slot
-  for(int i = 0;i<jobs_pool;i++) {
-    if(IS_JOB_EMPTY(pool->jobs[i])) {
+  for (int i = 0; i < jobs_pool; i++) {
+    if (IS_JOB_EMPTY(pool->jobs[i])) {
       pool->jobs[i] = *job;
       break;
     }
@@ -88,6 +95,7 @@ int jobs_submit(char *cmd_args) {
 
   Job job;
   job.id = key++;
+  job.running = 1;
   // time(2)
   job.timestamp = time(NULL);
 
@@ -122,11 +130,11 @@ int jobs_submit(char *cmd_args) {
     return -1;
   }
 
-  if(jobs_add(&job) < 0){
+  if (jobs_add(&job) < 0) {
     return -1;
   }
 
-  // TODO: Print output
+  printf("JobID: %d, PID: %d\n", job.id, job.pid);
 
   return 0;
 }
@@ -143,7 +151,7 @@ void jobs_show_active() {
   // TODO
 }
 
-void jobs_status(int id){
+void jobs_status(int id) {
   // TODO
 }
 
@@ -159,21 +167,77 @@ void jobs_resume(int id) {
   // TODO
 }
 
-void jobs_stopped(pid_t pid) {
-  // TODO
+int jobs_stopped(pid_t pid) {
+  // TODO: Should suspended jobs remain on the pool?
+  Pool *p;
+  FOR_EACH(pools, n) {
+    p = (Pool *)n->data;
+    for (int i = 0; i < jobs_pool; i++) {
+      if (p->jobs[i].pid == pid) {
+        p->jobs[i].running = 0;
+        return 0;
+      }
+    }
+  }
+
+  return -1;
 }
 
-void jobs_exited(pid_t pid) {
-  // TODO
+int jobs_continued(pid_t pid) {
+  Pool *p;
+  FOR_EACH(pools, n) {
+    p = (Pool *)n->data;
+    for (int i = 0; i < jobs_pool; i++) {
+      if (p->jobs[i].pid == pid) {
+        p->jobs[i].running = 1;
+        return 0;
+      }
+    }
+  }
+
+  return -1;
 }
 
-void jobs_continued(pid_t pid) {
-  // TODO
+int jobs_exited(pid_t pid) {
+  Job *job = NULL;
+
+  Pool *p;
+  FOR_EACH(pools, n) {
+    p = (Pool *)n->data;
+    for (int i = 0; i < jobs_pool; i++) {
+      if (p->jobs[i].pid == pid) {
+        job = &p->jobs[i];
+        break;
+      }
+    }
+  }
+
+  if (job == NULL) {
+    return -1;
+  }
+
+  Job *finished_job = malloc(sizeof(Job));
+  if (finished_job == NULL) {
+    return -1;
+  }
+
+  *finished_job = *job;
+
+  CLEAR_JOB(*job);
+  p->active--;
+
+  finished_job->running = 0;
+  if (ll_push(&finished, finished_job) < 0) {
+    return -1;
+  }
+
+  return 0;
 }
 
 void jobs_free() {
-  // TODO: Free pool struct memory
+  // TODO: Free pool & job struct memory
   ll_free(&pools);
+  ll_free(&finished);
 }
 
 int count_words(const char *args) {

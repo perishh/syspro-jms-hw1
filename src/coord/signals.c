@@ -1,12 +1,14 @@
 #include "signals.h"
 
+#include <errno.h>
 #include <signal.h>
 #include <stdio.h>
-#include <sys/signalfd.h>
 #include <sys/epoll.h>
+#include <sys/signalfd.h>
 #include <unistd.h>
 #include <wait.h>
-#include <errno.h>
+
+#include "jobs.h"
 
 int signals_setup(int epoll_fd) {
   // Add SIGCHLD to be watched for
@@ -53,16 +55,22 @@ int signals_read(int signal_fd) {
         continue;
       }
       if (WIFSTOPPED(wstatus)) {
-        // TODO: Child stopped
+        if (jobs_stopped(info.ssi_pid) < 0) {
+          // TODO: Handle
+        }
       } else if (WIFCONTINUED(wstatus)) {
-        // TODO: Child continue
+        if(jobs_continued(info.ssi_pid) < 0){
+          // TODO: Handle
+        }
       } else if (WIFEXITED(wstatus)) {
-        // TODO: Child exit
+        if (jobs_exited(info.ssi_pid) < 0) {
+          // TODO: Handle
+        }
       }
     }
   }
   if (nread < 0) {
-    if(errno == EAGAIN) {
+    if (errno == EAGAIN) {
       return 0;
     }
     return nread;
