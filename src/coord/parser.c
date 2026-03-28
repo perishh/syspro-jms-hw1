@@ -1,9 +1,9 @@
 #include "parser.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <errno.h>
 
 #include "jobs.h"
 
@@ -34,7 +34,7 @@ int parse_arguments(int argc, char **argv, char **path, int *jobs_pool) {
     print_usage();
     return -1;
   }
-  
+
   return 0;
 }
 
@@ -82,13 +82,17 @@ int parse_commands(int jms_in, Command *cmd_buffer) {
     case SUBMIT:
       jobs_submit(cmd_buffer->args);
       break;
+    case SUSPEND:
+      jobs_suspend(atoi(cmd_buffer->args));
+      break;
+    case RESUME:
+      jobs_resume(atoi(cmd_buffer->args));
+      break;
     case STATUS:
     case STATUS_ALL:
     case SHOW_ACTIVE:
     case SHOW_POOLS:
     case SHOW_FINISHED:
-    case SUSPEND:
-    case RESUME:
     case SHUTDOWN:
     default:
       fprintf(stderr, "Unknown command.\n");
@@ -97,7 +101,7 @@ int parse_commands(int jms_in, Command *cmd_buffer) {
   }
 
   if (nread < 0) {
-    if(errno == EAGAIN) {
+    if (errno == EAGAIN) {
       return 0;
     }
     return nread;

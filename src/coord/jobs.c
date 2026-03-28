@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -12,7 +13,7 @@
 
 int count_words(const char *args);
 
-int key = 0;
+int key = 1; // starts from 1 to handle invalid atoi
 
 typedef struct {
   int id;
@@ -159,12 +160,58 @@ void jobs_status_all(int n) {
   // TODO
 }
 
-void jobs_suspend(int id) {
-  // TODO
+int jobs_suspend(int id) {
+  Pool *p;
+  FOR_EACH(pools, n) {
+    p = (Pool *)n->data;
+    for (int i = 0; i < jobs_pool; i++) {
+      if (p->jobs[i].id == id) {
+        if(!p->jobs[i].running) {
+          printf("Job already suspended\n");
+          return -1;
+        }
+
+        // kill(2)
+        if(kill(p->jobs[i].pid, SIGSTOP) < 0) {
+          printf("Couldn't send signal to job\n");
+          return -1;
+        }
+        
+        printf("Sent suspend signal to JobID %d\n", id);
+        return 0;
+      }
+    }
+  }
+
+  printf("JobID %d not found\n", id);
+  return -1;
 }
 
-void jobs_resume(int id) {
-  // TODO
+int jobs_resume(int id) {
+  Pool *p;
+  FOR_EACH(pools, n) {
+    p = (Pool *)n->data;
+    for (int i = 0; i < jobs_pool; i++) {
+      if (p->jobs[i].id == id) {
+        if(p->jobs[i].running) {
+          printf("Job already running\n");
+          return -1;
+        }
+
+        // kill(2)
+        if(kill(p->jobs[i].pid, SIGCONT) < 0) {
+          printf("Couldn't send signal to job\n");
+          return -1;
+        }
+        
+        printf("Sent resume signal to JobID %d\n", id);
+        return 0;
+      }
+    }
+  }
+
+  printf("JobID %d not found\n", id);
+  return -1;
 }
 
 int jobs_stopped(pid_t pid) {
