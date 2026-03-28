@@ -10,7 +10,7 @@
 
 #define DATETIME_SIZE 16 // Including \0
 
-int cd_to_outputs(int id, time_t timestamp) {
+int outputs_cd(int id, time_t timestamp) {
   char *buffer = malloc(64);
   if (buffer == NULL) {
     return -1;
@@ -55,7 +55,7 @@ int cd_to_outputs(int id, time_t timestamp) {
   return 0;
 }
 
-int redirect_outputs(int id) {
+int outputs_redirect(int id) {
   char path[32];
 
   int ret = snprintf(path, 32, "stdout_%d", id);

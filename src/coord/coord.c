@@ -9,14 +9,12 @@
 #include "command.h"
 #include "globals.h"
 #include "parser.h"
-#include "signals.h"
 #include "pipes.h"
+#include "signals.h"
 
 #define MAX_EVENTS 10
 
 int jobs_pool = 0;
-
-Command *cmd_buffer = NULL;
 
 int main(int argc, char **argv) {
   char *path = NULL;
@@ -32,7 +30,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-    // epoll(7), epoll_create(2)
+  // epoll(7), epoll_create(2)
   int epoll_fd = epoll_create1(EPOLL_CLOEXEC);
   if (epoll_fd < 0) {
     perror("epoll_create");
@@ -40,21 +38,19 @@ int main(int argc, char **argv) {
   }
 
   int jms_in = pipes_setup(epoll_fd);
-  if(jms_in < 0) {
+  if (jms_in < 0) {
     perror("pipes setup");
 
     close(epoll_fd);
     return 1;
   }
 
-  cmd_buffer = malloc(sizeof(Command));
+  Command *cmd_buffer = malloc(sizeof(Command));
   if (cmd_buffer == NULL) {
     perror("malloc");
 
     close(epoll_fd);
-    close(jms_in);
-    unlink(JMS_IN);
-    unlink(JMS_OUT);
+    pipes_free();
     return 1;
   }
 
@@ -63,10 +59,8 @@ int main(int argc, char **argv) {
     perror("setup signals");
 
     free(cmd_buffer);
-    close(jms_in);
     close(epoll_fd);
-    unlink(JMS_IN);
-    unlink(JMS_OUT);
+    pipes_free();
     return 1;
   }
 
@@ -75,11 +69,9 @@ int main(int argc, char **argv) {
     int count = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
     if (count < 0) {
       close(epoll_fd);
-      close(jms_in);
       close(signal_fd);
       free(cmd_buffer);
-      unlink(JMS_IN);
-      unlink(JMS_OUT);
+      pipes_free();
       return 1;
     }
     for (int i = 0; i < count; i++) {
@@ -99,12 +91,10 @@ int main(int argc, char **argv) {
     }
   }
 
-  close(epoll_fd);
-  close(jms_in);
-  close(signal_fd);
   free(cmd_buffer);
-  unlink(JMS_IN);
-  unlink(JMS_OUT);
+  close(epoll_fd);
+  close(signal_fd);
+  pipes_free();
 
   return 0;
 }

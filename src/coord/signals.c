@@ -52,7 +52,6 @@ int signals_read(int signal_fd) {
         perror("waitpid");
         continue;
       }
-      printf("Received signal child\n");
       if (WIFSTOPPED(wstatus)) {
         // TODO: Child stopped
       } else if (WIFCONTINUED(wstatus)) {

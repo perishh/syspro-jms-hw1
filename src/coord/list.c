@@ -12,9 +12,11 @@ int ll_push(LinkedList* l, const void* data) {
     if(node == NULL) {
         return -1;
     }
-    node->data = data;
     
+    node->data = data;
     node->next = l->front;
+
+    l->front = node;
     l->size++;
     
     return 0;

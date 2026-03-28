@@ -80,7 +80,6 @@ int parse_commands(int jms_in, Command *cmd_buffer) {
 
     switch (cmd_buffer->action) {
     case SUBMIT:
-      printf("Submitting job\n");
       jobs_submit(cmd_buffer->args);
       break;
     case STATUS:

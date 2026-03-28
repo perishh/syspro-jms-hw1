@@ -16,13 +16,15 @@ int key = 0;
 
 typedef struct {
   int id;
-  pid_t pid;
+  pid_t pid;            // 0 indicates empty slot
   time_t timestamp;
 } Job;
 
+#define IS_JOB_EMPTY(job) (job.pid == 0)
+
 typedef struct {
   int active;
-  Job jobs[]; // FAM
+  Job jobs[];           // FAM
 } Pool;
 
 LinkedList pools;
@@ -30,19 +32,37 @@ LinkedList pools;
 void jobs_init() { ll_init(&pools); }
 
 int jobs_add(const Job *job) {
-  // TODO: Check for available pool
-
-  // Create new pool
-  Pool *pool = calloc(1, sizeof(Pool) + (sizeof(Job) * jobs_pool));
-  if (pool == NULL) {
-    return -1;
+  Pool* pool = NULL;
+  for(Node *n = pools.front; n != NULL; n = n->next) {
+    Pool* p = (Pool*) n->data;
+    if(p->active < jobs_pool) {
+      pool = p;
+      break;
+    }
   }
-  pool->jobs[pool->active++] = *job;
 
-  if (ll_push(&pools, pool) < 0) {
-    free(pool);
-    return -1;
+  if(pool == NULL) {
+    // Create new pool
+    pool = calloc(1, sizeof(Pool) + (sizeof(Job) * jobs_pool));
+    if (pool == NULL) {
+      return -1;
+    }
+    if (ll_push(&pools, pool) < 0) {
+      free(pool);
+      return -1;
+    }
   }
+
+  // Search for available job slot
+  for(int i = 0;i<jobs_pool;i++) {
+    if(IS_JOB_EMPTY(pool->jobs[i])) {
+      pool->jobs[i] = *job;
+      break;
+    }
+  }
+  pool->active++;
+
+  // TODO: Check with gdb
 
   return 0;
 }
@@ -77,13 +97,13 @@ int jobs_submit(char *cmd_args) {
     // Child process
 
     // Change working directory
-    if (cd_to_outputs(job.id, job.timestamp) < 0) {
+    if (outputs_cd(job.id, job.timestamp) < 0) {
       perror("cd to outputs");
       return 1;
     }
 
     // Redirect stdout & stderr to files
-    if (redirect_outputs(job.id) < 0) {
+    if (outputs_redirect(job.id) < 0) {
       perror("redirect_outputs");
       return 1;
     }
@@ -99,11 +119,56 @@ int jobs_submit(char *cmd_args) {
 
   if (job.pid < 0) {
     // Failed to fork
-    perror("fork");
     return -1;
   }
 
-  return jobs_add(&job);
+  if(jobs_add(&job) < 0){
+    return -1;
+  }
+
+  // TODO: Print output
+
+  return 0;
+}
+
+void jobs_show_finished() {
+  // TODO
+}
+
+void jobs_show_pools() {
+  // TODO
+}
+
+void jobs_show_active() {
+  // TODO
+}
+
+void jobs_status(int id){
+  // TODO
+}
+
+void jobs_status_all(int n) {
+  // TODO
+}
+
+void jobs_suspend(int id) {
+  // TODO
+}
+
+void jobs_resume(int id) {
+  // TODO
+}
+
+void jobs_stopped(pid_t pid) {
+  // TODO
+}
+
+void jobs_exited(pid_t pid) {
+  // TODO
+}
+
+void jobs_continued(pid_t pid) {
+  // TODO
 }
 
 void jobs_free() {
