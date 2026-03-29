@@ -118,11 +118,11 @@ int main(int argc, char **argv) {
 }
 
 int read_commands(FILE *stream) {
-  static size_t nread;
+  static size_t buffer_size;
 
   // Potentially unsafe to write more than PIPE_BUF at once
-  ssize_t ret;
-  while ((ret = getline(&buffer, &nread, stream)) > 0) {
+  ssize_t nread;
+  while ((nread = getline(&buffer, &buffer_size, stream)) > 0) {
     // Parse command
     char *action = strtok(buffer, " \n");
     if (action == NULL) {
@@ -137,8 +137,8 @@ int read_commands(FILE *stream) {
       continue;
     }
 
-    size_t arg_length_with_null = 0;
-    size_t action_length_with_null = strlen(action) + 1;
+    ssize_t arg_length_with_null = 0;
+    ssize_t action_length_with_null = strlen(action) + 1;
 
     if ((cmd->action & ZERO_ARG_ACTIONS) != 0) {
       if (nread > action_length_with_null) {
@@ -153,15 +153,20 @@ int read_commands(FILE *stream) {
         continue;
       }
 
-      arg_length_with_null = nread - action_length_with_null;
+      arg_length_with_null = nread - action_length_with_null + 1;
       cmd->len = arg_length_with_null - 1;
     }
 
     // Send command
-    if (write(out, cmd, sizeof(Command)) < 0 ||
-        (arg_length_with_null > 0 &&
-         write(out, buffer + action_length_with_null, arg_length_with_null) <
-             0)) {
+    if (write(out, cmd, sizeof(Command)) < 0) {
+      if (errno == EPIPE) {
+        fprintf(stderr, "Coordinator is no longer running.\n");
+      }
+      return -1;
+    }
+
+    if (write(out, buffer + action_length_with_null, arg_length_with_null) <
+        0) {
       if (errno == EPIPE) {
         fprintf(stderr, "Coordinator is no longer running.\n");
       }
@@ -170,8 +175,9 @@ int read_commands(FILE *stream) {
   }
   // ferror(3)
   // Distinguish end of file and error
-  if(feof(stream)) return 0;
-  return ret;
+  if (feof(stream))
+    return 0;
+  return nread;
 }
 
 Action parse_action(const char *cmd) {

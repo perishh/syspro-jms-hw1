@@ -56,14 +56,14 @@ int pipes_setup(int epoll_fd) {
   }
 
   // TODO: Handle closing
-  if (dup2(jms_out, STDOUT_FILENO) < 0) {
-    close(jms_out);
-    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, jms_in, &event);
-    close(jms_in);
-    unlink(JMS_IN);
-    unlink(JMS_OUT);
-    return -1;
-  }
+  // if (dup2(jms_out, STDOUT_FILENO) < 0) {
+  //   close(jms_out);
+  //   epoll_ctl(epoll_fd, EPOLL_CTL_DEL, jms_in, &event);
+  //   close(jms_in);
+  //   unlink(JMS_IN);
+  //   unlink(JMS_OUT);
+  //   return -1;
+  // }
 
   return jms_in;
 }

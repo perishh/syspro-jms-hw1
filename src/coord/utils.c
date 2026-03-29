@@ -1,6 +1,9 @@
 #include "utils.h"
 
+#include <poll.h>
 #include <string.h>
+#include <sys/poll.h>
+#include <unistd.h>
 
 // Delimiter is Space or \n (or NULL)
 int count_words(const char *args) {
@@ -35,4 +38,18 @@ int decode_args(char *raw, char **argv) {
   }
 
   return 0;
+}
+
+ssize_t read_blocking(int __fd, void *__buf, size_t __nbytes) {
+  // poll(2)
+  struct pollfd pfd;
+  pfd.fd = __fd;
+  pfd.events = POLLIN;
+
+  int ret = poll(&pfd, 1, -1);
+  if(ret < 0) {
+    return ret;
+  }
+
+  return read(__fd, __buf, __nbytes);
 }

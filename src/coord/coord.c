@@ -10,6 +10,7 @@
 #include "globals.h"
 #include "parser.h"
 #include "pipes.h"
+#include "pools.h"
 #include "signals.h"
 
 #define MAX_EVENTS 10
@@ -30,10 +31,15 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  if (pools_init() < 0) {
+    return 1;
+  }
+
   // epoll(7), epoll_create(2)
   int epoll_fd = epoll_create1(EPOLL_CLOEXEC);
   if (epoll_fd < 0) {
     perror("epoll_create");
+    pools_free();
     return 1;
   }
 
@@ -41,6 +47,7 @@ int main(int argc, char **argv) {
   if (jms_in < 0) {
     perror("pipes setup");
 
+    pools_free();
     close(epoll_fd);
     return 1;
   }
@@ -50,6 +57,7 @@ int main(int argc, char **argv) {
     perror("malloc");
 
     close(epoll_fd);
+    pools_free();
     pipes_free();
     return 1;
   }
@@ -61,6 +69,7 @@ int main(int argc, char **argv) {
 
     free(cmd_buffer);
     close(epoll_fd);
+    pools_free();
     pipes_free();
     return 1;
   }
@@ -72,6 +81,7 @@ int main(int argc, char **argv) {
       close(epoll_fd);
       close(signal_fd);
       free(cmd_buffer);
+      pools_free();
       pipes_free();
       return 1;
     }
@@ -84,8 +94,24 @@ int main(int argc, char **argv) {
         // TODO: Handle
       } else if (events[i].data.fd == jms_in) {
         // Command received
-        if (parse_commands(jms_in, cmd_buffer) < 0) {
+        if (parse_commands(jms_in, &cmd_buffer) < 0) {
           continue;
+        }
+        switch (cmd_buffer->action) {
+        case SUBMIT:
+          printf("Command received submit args: %s\n", cmd_buffer->args);
+          pools_enqueue(cmd_buffer->len, cmd_buffer->args);
+          break;
+        case STATUS:
+        case STATUS_ALL:
+        case SHOW_ACTIVE:
+        case SHOW_POOLS:
+        case SHOW_FINISHED:
+        case SUSPEND:
+        case RESUME:
+        case SHUTDOWN:
+        case UNKNOWN:
+          break;
         }
         // TODO: Handle
       }
@@ -96,6 +122,7 @@ int main(int argc, char **argv) {
   close(epoll_fd);
   close(signal_fd);
   pipes_free();
+  pools_free();
 
   return 0;
 }

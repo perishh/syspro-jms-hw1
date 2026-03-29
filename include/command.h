@@ -19,6 +19,7 @@ typedef enum {
 // FAM pattern
 typedef struct {
     Action action;
+    int data;
     int len;
     char args[];
 } Command;
