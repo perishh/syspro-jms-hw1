@@ -1,14 +1,10 @@
 #include "signals.h"
 
-#include <errno.h>
 #include <signal.h>
-#include <stdio.h>
 #include <sys/epoll.h>
 #include <sys/signalfd.h>
 #include <unistd.h>
 #include <wait.h>
-
-#include "jobs.h"
 
 int signals_setup(int epoll_fd) {
   // Add SIGCHLD to be watched for
@@ -42,38 +38,34 @@ int signals_setup(int epoll_fd) {
   return signal_fd;
 }
 
-int signals_read(int signal_fd) {
-  static struct signalfd_siginfo info;
-  ssize_t nread;
-  while ((nread = read(signal_fd, &info, sizeof(struct signalfd_siginfo))) >
-         0) {
-    if (info.ssi_signo == SIGCHLD) {
-      // wait(2)
-      int wstatus;
-      if (waitpid(info.ssi_pid, &wstatus, WUNTRACED | WCONTINUED) < 0) {
-        perror("waitpid");
-        continue;
-      }
-      if (WIFSTOPPED(wstatus)) {
-        if (jobs_stopped(info.ssi_pid) < 0) {
-          // TODO: Handle
-        }
-      } else if (WIFCONTINUED(wstatus)) {
-        if(jobs_continued(info.ssi_pid) < 0){
-          // TODO: Handle
-        }
-      } else if (WIFEXITED(wstatus)) {
-        if (jobs_exited(info.ssi_pid) < 0) {
-          // TODO: Handle
-        }
-      }
-    }
-  }
+int signals_read(int signal_fd, SignalInfo *info) {
+  static struct signalfd_siginfo siginfo;
+
+  ssize_t nread = read(signal_fd, &siginfo, sizeof(struct signalfd_siginfo));
   if (nread < 0) {
-    if (errno == EAGAIN) {
-      return 0;
-    }
-    return nread;
+    return -1;
   }
+
+  if (siginfo.ssi_signo == SIGCHLD) {
+    // wait(2)
+    int wstatus;
+    if (waitpid(siginfo.ssi_pid, &wstatus, WUNTRACED | WCONTINUED) < 0) {
+      return -1;
+    }
+
+    info->pid = siginfo.ssi_pid;
+    if (WIFSTOPPED(wstatus)) {
+      info->cause = STOPPED;
+    } else if (WIFCONTINUED(wstatus)) {
+      info->cause = CONTINUED;
+    } else if (WIFEXITED(wstatus)) {
+      info->cause = EXITED;
+    } else {
+      return -1;
+    }
+  } else {
+    return -1;
+  }
+
   return 0;
 }

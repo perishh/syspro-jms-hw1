@@ -9,6 +9,8 @@
 
 #include "globals.h"
 #include "list.h"
+#include "parser.h"
+#include "signals.h"
 
 // TODO: Check if I can make it a separate program
 // and run it with exec
@@ -71,6 +73,15 @@ void jobs_init(int id) {
     exit(1);
   }
 
+  Command *cmd_buffer = malloc(sizeof(Command));
+  if (cmd_buffer == NULL) {
+    close(in);
+    close(out);
+    ll_free(&jobs);
+    ll_free(&finished);
+    exit(1);
+  }
+
   int epoll_fd = epoll_create1(EPOLL_CLOEXEC);
   if (epoll_fd < 0) {
     close(in);
@@ -84,6 +95,17 @@ void jobs_init(int id) {
   event.events = EPOLLIN;
   event.data.fd = STDIN_FILENO;
   if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, STDIN_FILENO, &event) < 0) {
+    close(in);
+    close(out);
+    close(epoll_fd);
+    ll_free(&jobs);
+    ll_free(&finished);
+    exit(1);
+  }
+
+  SignalInfo signal;
+  int signal_fd = signals_setup(epoll_fd);
+  if (signal_fd < 0) {
     close(in);
     close(out);
     close(epoll_fd);
@@ -112,7 +134,27 @@ void jobs_init(int id) {
     }
     for (int i = 0; i < count; i++) {
       if (events[i].data.fd == STDIN_FILENO) {
-        // Command from coord
+        if (parse_commands(STDIN_FILENO, cmd_buffer) < 0) {
+          continue;
+        }
+        switch (cmd_buffer->action) {
+          case SUBMIT:
+          case STATUS:
+          case STATUS_ALL:
+          case SHOW_ACTIVE:
+          case SHOW_POOLS:
+          case SHOW_FINISHED:
+          case SUSPEND:
+          case RESUME:
+          case SHUTDOWN:
+          case UNKNOWN:
+          break;
+        }
+        // TODO
+      } else if (events[i].data.fd == signal_fd) {
+        if(signals_read(signal_fd, &signal) < 0){
+          continue;
+        }
         // TODO
       }
     }
@@ -121,6 +163,7 @@ void jobs_init(int id) {
   free(events);
   close(in);
   close(out);
+  close(signal_fd);
   close(epoll_fd);
   ll_free(&jobs);
   ll_free(&finished);

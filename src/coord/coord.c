@@ -54,6 +54,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  SignalInfo signal;
   int signal_fd = signals_setup(epoll_fd);
   if (signal_fd < 0) {
     perror("setup signals");
@@ -77,16 +78,16 @@ int main(int argc, char **argv) {
     for (int i = 0; i < count; i++) {
       if (events[i].data.fd == signal_fd) {
         // Signal received
-        if (signals_read(signal_fd) < 0) {
-          perror("signal_fd");
+        if (signals_read(signal_fd, &signal) < 0) {
           continue;
         }
+        // TODO: Handle
       } else if (events[i].data.fd == jms_in) {
         // Command received
         if (parse_commands(jms_in, cmd_buffer) < 0) {
-          perror("parse_commands");
           continue;
         }
+        // TODO: Handle
       }
     }
   }
