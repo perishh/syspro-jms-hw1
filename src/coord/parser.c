@@ -66,7 +66,7 @@ int parse_commands(int in, Command** cmd_ptr) {
 
   
   // Check current buffer size and expand if needed
-  ssize_t required_space = sizeof(Command) + (*cmd_ptr)->len + 1;
+  ssize_t required_space = sizeof(Command) + (*cmd_ptr)->len + 2; // \0 + EOF
   if (buffer_size < required_space) {
     buffer_size = required_space;
     
@@ -78,7 +78,7 @@ int parse_commands(int in, Command** cmd_ptr) {
   }
   
   // Read arguments
-  nread = read_blocking(in, (*cmd_ptr)->args, (*cmd_ptr)->len + 1);
+  nread = read_blocking(in, (*cmd_ptr)->args, (*cmd_ptr)->len + 2); // \0 + EOF
   if (nread < 0) {
     return -1;
   }

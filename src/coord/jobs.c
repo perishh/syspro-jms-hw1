@@ -36,12 +36,11 @@ typedef struct {
 LinkedList jobs;
 LinkedList finished;
 
-// int epoll_fd;
-
 int jobs_add(int id, char *raw) {
   if (active >= jobs_pool) {
     return -1;
   }
+  active++;
 
   int argc = count_words(raw);
   char *argv[argc + 1]; // Account for terminating NULL; TODO: Consider malloc
@@ -58,7 +57,7 @@ int jobs_add(int id, char *raw) {
   job->running = 1;
   // time(2)
   job->timestamp = time(NULL);
-
+  
   // fork(2)
   job->pid = fork();
   if (job->pid == 0) {
@@ -159,6 +158,8 @@ void jobs_init(int id) {
         if (parse_commands(PIPEIN, &cmd_buffer) < 0) {
           continue;
         }
+        printf("Received command: %d\n", (int) (cmd_buffer->action));
+        printf("Received command: %s\n", cmd_buffer->args);
         switch (cmd_buffer->action) {
         case SUBMIT:
           printf("Adding job\n");
@@ -200,7 +201,7 @@ int init_pipes(int id, int epoll_fd) {
   char str[32];
   sprintf(str, "pool_%d_in", id);
 
-  PIPEIN = open(str, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
+  PIPEIN = open(str, O_RDWR | O_CLOEXEC | O_NONBLOCK);
   if (PIPEIN < 0) {
     return -1;
   }

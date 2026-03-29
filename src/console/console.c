@@ -164,14 +164,16 @@ int read_commands(FILE *stream) {
       }
       return -1;
     }
-
+    printf("Command sent\n");
+    
     if (write(out, buffer + action_length_with_null, arg_length_with_null) <
-        0) {
+    0) {
       if (errno == EPIPE) {
         fprintf(stderr, "Coordinator is no longer running.\n");
       }
       return -1;
     }
+    printf("Arguments sent\n");
   }
   // ferror(3)
   // Distinguish end of file and error

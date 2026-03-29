@@ -77,6 +77,7 @@ int main(int argc, char **argv) {
   struct epoll_event events[MAX_EVENTS];
   for (;;) {
     int count = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
+    printf("Unblocked\n");
     if (count < 0) {
       close(epoll_fd);
       close(signal_fd);
@@ -93,6 +94,7 @@ int main(int argc, char **argv) {
         }
         // TODO: Handle
       } else if (events[i].data.fd == jms_in) {
+        printf("Read signaled\n");
         // Command received
         if (parse_commands(jms_in, &cmd_buffer) < 0) {
           continue;
@@ -101,6 +103,7 @@ int main(int argc, char **argv) {
         case SUBMIT:
           printf("Command received submit args: %s\n", cmd_buffer->args);
           pools_enqueue(cmd_buffer->len, cmd_buffer->args);
+          printf("Enqueue returned\n");
           break;
         case STATUS:
         case STATUS_ALL:

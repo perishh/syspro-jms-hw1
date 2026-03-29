@@ -28,7 +28,8 @@ int pipes_setup(int epoll_fd) {
   }
 
   // open(2)
-  jms_in = open(JMS_IN, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
+  // Open as read-write to avoid getting EOF when console exits
+  jms_in = open(JMS_IN, O_RDWR | O_CLOEXEC | O_NONBLOCK);
   if (jms_in < 0) {
     unlink(JMS_IN);
     unlink(JMS_OUT);

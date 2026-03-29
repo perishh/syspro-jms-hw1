@@ -24,10 +24,10 @@ LinkedList pools;
 int pool_key = 1;
 int job_key = 1;
 
-Command* cmd_buffer;
+Command *cmd_buffer;
 
 int pools_init() {
-  if((cmd_buffer = malloc(sizeof(Command))) == NULL) {
+  if ((cmd_buffer = malloc(sizeof(Command))) == NULL) {
     return -1;
   }
   ll_init(&pools);
@@ -88,47 +88,46 @@ int pools_start() {
   return 0;
 }
 
-Pool* find_or_start() {
-  Pool* pool = NULL;
+Pool *find_or_start() {
+  Pool *pool = NULL;
   FOR_EACH(pools, n) {
-    Pool* p = (Pool*) n->data;
-    if(p->active < jobs_pool) {
+    Pool *p = (Pool *)n->data;
+    if (p->active < jobs_pool) {
       pool = p;
       break;
     }
   }
 
-  if(pool == NULL) {
-    if(pools_start() < 0) {
+  if (pool == NULL) {
+    if (pools_start() < 0) {
       return NULL;
     }
-    pool = (Pool*) pools.front->data;
+    pool = (Pool *)pools.front->data;
   }
 
   return pool;
 }
 
 int pools_enqueue(int len, char *args) {
-  Pool* pool = find_or_start();
-  if(pool == NULL) {
+  Pool *pool = find_or_start();
+  if (pool == NULL) {
     // TODO: FIX Reached here
     return -1;
   }
 
   char str[32];
 
-  
   sprintf(str, "pool_%d_out", pool->id);
   int in = open(str, O_RDONLY | O_NONBLOCK);
-  if(in < 0) {
+  if (in < 0) {
     return -1;
   }
 
   printf("Opened pipe to pool\n");
-  
+
   sprintf(str, "pool_%d_in", pool->id);
   int out = open(str, O_WRONLY);
-  if(out < 0) {
+  if (out < 0) {
     perror("open pool in");
     printf("Failed to open pipe from pool %s\n", str);
     close(in);
@@ -136,14 +135,14 @@ int pools_enqueue(int len, char *args) {
   }
 
   printf("Opened pipe from pool\n");
-  
+
   cmd_buffer->action = SUBMIT;
   cmd_buffer->data = job_key++;
   cmd_buffer->len = len;
 
   pool->active++;
 
-  if(write(out, cmd_buffer, sizeof(Command)) < 0) {
+  if (write(out, cmd_buffer, sizeof(Command)) < 0) {
     close(in);
     close(out);
     return -1;
@@ -151,7 +150,7 @@ int pools_enqueue(int len, char *args) {
 
   printf("Written command\n");
 
-  if(write(out, args, cmd_buffer->len + 1) < 0) {
+  if (write(out, args, cmd_buffer->len + 1) < 0) {
     close(in);
     close(out);
     return -1;
@@ -159,12 +158,14 @@ int pools_enqueue(int len, char *args) {
 
   printf("Written args\n");
 
-  // Redirect to console (duped stdout)
-  ssize_t nread;
-  while((nread = read_blocking(in, str, 32)) > 0) {
-    printf("%.*s\n", (int) nread, str);
-    write(STDOUT_FILENO, str, nread);
+  // Read first blocking
+  ssize_t nread = read_blocking(in, str, 32);
+  if (nread > 0) {
+    do {
+      write(STDOUT_FILENO, str, nread);
+    } while ((nread = read(in, str, 32)) > 0);
   }
+
   // No need to check for redirection errors
 
   printf("Read output\n");
