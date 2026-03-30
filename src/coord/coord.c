@@ -52,7 +52,8 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  Command *cmd_buffer = malloc(sizeof(Command));
+  int buffer_size = sizeof(Command);
+  Command *cmd_buffer = malloc(buffer_size);
   if (cmd_buffer == NULL) {
     perror("malloc");
 
@@ -77,7 +78,6 @@ int main(int argc, char **argv) {
   struct epoll_event events[MAX_EVENTS];
   for (;;) {
     int count = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
-    printf("Unblocked\n");
     if (count < 0) {
       close(epoll_fd);
       close(signal_fd);
@@ -94,16 +94,15 @@ int main(int argc, char **argv) {
         }
         // TODO: Handle
       } else if (events[i].data.fd == jms_in) {
-        printf("Read signaled\n");
+        printf("There is data in input fifo\n");
         // Command received
-        if (parse_commands(jms_in, &cmd_buffer) < 0) {
+        if (parse_commands(jms_in, &cmd_buffer, &buffer_size) < 0) {
           continue;
         }
+        printf("Action: %d %s\n", cmd_buffer->action, cmd_buffer->args);
         switch (cmd_buffer->action) {
         case SUBMIT:
-          printf("Command received submit args: %s\n", cmd_buffer->args);
           pools_enqueue(cmd_buffer->len, cmd_buffer->args);
-          printf("Enqueue returned\n");
           break;
         case STATUS:
         case STATUS_ALL:

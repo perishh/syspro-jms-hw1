@@ -41,10 +41,7 @@ int parse_arguments(int argc, char **argv, char **path, int *jobs_pool) {
   return 0;
 }
 
-int parse_commands(int in, Command** cmd_ptr) {
-  static ssize_t buffer_size = sizeof(Command);
-  // Command* (*cmd_ptr) = *cmd_ptr;
-
+int parse_commands(int in, Command** cmd_ptr, int* buffer_zize) {
   ssize_t nread = read(in, (*cmd_ptr), sizeof(Command));
   if (nread < 0) {
     return -1;
@@ -67,13 +64,15 @@ int parse_commands(int in, Command** cmd_ptr) {
   
   // Check current buffer size and expand if needed
   ssize_t required_space = sizeof(Command) + (*cmd_ptr)->len + 2; // \0 + EOF
-  if (buffer_size < required_space) {
-    buffer_size = required_space;
-    
+  if ((*buffer_zize) < required_space) {
+    printf("%d Requesting %ld\n", getpid(),required_space);
+    // TODO: CHECK STATIC MEMBERS FOR INVALID DATA WHEN FORKING
     Command *temp = realloc((*cmd_ptr), required_space);
     if (temp == NULL) {
+      perror("relloc fail");
       return -1;
     }
+    *buffer_zize = required_space;
     *cmd_ptr = temp;
   }
   
@@ -88,6 +87,8 @@ int parse_commands(int in, Command** cmd_ptr) {
     printf("Malformed arguments\n");
     return -1;
   }
+
+  printf("%d Sent request\n", getpid());
 
   return 0;
 }

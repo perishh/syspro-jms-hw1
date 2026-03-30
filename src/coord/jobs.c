@@ -21,6 +21,8 @@
 int PIPEIN;
 FILE *PIPEOUT;
 
+#define SENDF(fmt, ...) {fprintf(PIPEOUT, fmt __VA_OPT__(,) __VA_ARGS__);fflush(PIPEOUT);}
+
 int init_pipes(int id, int epoll_fd);
 void close_pipes();
 
@@ -80,8 +82,6 @@ int jobs_add(int id, char *raw) {
     }
   }
 
-  printf("Forked\n");
-
   if (job->pid < 0) {
     free(job);
     return -1;
@@ -90,16 +90,13 @@ int jobs_add(int id, char *raw) {
   if (ll_push(&jobs, job) < 0) {
     return -1;
   }
-  
-  fprintf(PIPEOUT, "JobID: %d, PID: %d\n", job->id, job->pid);
-  fflush(PIPEOUT);
-  printf("Returned\n");
+
+  SENDF("JobID: %d, PID: %d\n", job->id, job->pid);
   return 0;
 }
 
 void jobs_init(int id) {
   // Pool process entry point
-  printf("Start\n");
   ll_init(&jobs);
   ll_init(&finished);
 
@@ -117,7 +114,8 @@ void jobs_init(int id) {
     exit(1);
   }
 
-  Command *cmd_buffer = malloc(sizeof(Command));
+  int buffer_size = sizeof(Command);
+  Command *cmd_buffer = malloc(buffer_size);
   if (cmd_buffer == NULL) {
     close_pipes();
     close(epoll_fd);
@@ -146,7 +144,6 @@ void jobs_init(int id) {
     ll_free(&finished);
     exit(1);
   }
-  printf("Started\n");
   for (;;) {
     int count = epoll_wait(epoll_fd, events, max_events, -1);
     if (count < 0) {
@@ -155,14 +152,11 @@ void jobs_init(int id) {
     }
     for (int i = 0; i < count; i++) {
       if (events[i].data.fd == PIPEIN) {
-        if (parse_commands(PIPEIN, &cmd_buffer) < 0) {
+        if (parse_commands(PIPEIN, &cmd_buffer, &buffer_size) < 0) {
           continue;
         }
-        printf("Received command: %d\n", (int) (cmd_buffer->action));
-        printf("Received command: %s\n", cmd_buffer->args);
         switch (cmd_buffer->action) {
         case SUBMIT:
-          printf("Adding job\n");
           jobs_add(cmd_buffer->data, cmd_buffer->args);
           break;
         case STATUS:
@@ -222,8 +216,6 @@ int init_pipes(int id, int epoll_fd) {
     fclose(PIPEOUT);
     return -1;
   }
-
-  printf("Added to epoll\n");
 
   return 0;
 }

@@ -11,6 +11,7 @@
 #include "globals.h"
 #include "jobs.h"
 #include "list.h"
+#include "pipes.h"
 #include "utils.h"
 
 typedef struct {
@@ -108,39 +109,23 @@ Pool *find_or_start() {
   return pool;
 }
 
-int pools_enqueue(int len, char *args) {
-  Pool *pool = find_or_start();
-  if (pool == NULL) {
-    // TODO: FIX Reached here
-    return -1;
-  }
-
+int send_and_receive(const Pool *pool, const char *args) {
   char str[32];
 
+  // TODO: Race condition a pool might have exited by
+  // the time the request to submit a new job is sent
   sprintf(str, "pool_%d_out", pool->id);
   int in = open(str, O_RDONLY | O_NONBLOCK);
   if (in < 0) {
     return -1;
   }
 
-  printf("Opened pipe to pool\n");
-
   sprintf(str, "pool_%d_in", pool->id);
   int out = open(str, O_WRONLY);
   if (out < 0) {
-    perror("open pool in");
-    printf("Failed to open pipe from pool %s\n", str);
     close(in);
     return -1;
   }
-
-  printf("Opened pipe from pool\n");
-
-  cmd_buffer->action = SUBMIT;
-  cmd_buffer->data = job_key++;
-  cmd_buffer->len = len;
-
-  pool->active++;
 
   if (write(out, cmd_buffer, sizeof(Command)) < 0) {
     close(in);
@@ -148,32 +133,42 @@ int pools_enqueue(int len, char *args) {
     return -1;
   }
 
-  printf("Written command\n");
-
   if (write(out, args, cmd_buffer->len + 1) < 0) {
     close(in);
     close(out);
     return -1;
   }
 
-  printf("Written args\n");
-
   // Read first blocking
   ssize_t nread = read_blocking(in, str, 32);
   if (nread > 0) {
     do {
-      write(STDOUT_FILENO, str, nread);
+      write(JMSOUT_FILENO, str, nread);
     } while ((nread = read(in, str, 32)) > 0);
   }
 
   // No need to check for redirection errors
 
-  printf("Read output\n");
-
   close(in);
   close(out);
 
   return 0;
+}
+
+int pools_enqueue(int len, char *args) {
+  Pool *pool = find_or_start();
+  if (pool == NULL) {
+    // TODO: FIX Reached here
+    return -1;
+  }
+
+  pool->active++;
+
+  cmd_buffer->action = SUBMIT;
+  cmd_buffer->data = job_key++;
+  cmd_buffer->len = len;
+
+  return send_and_receive(pool, args);
 }
 
 void pools_free() {

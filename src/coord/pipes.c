@@ -9,7 +9,7 @@
 #include "globals.h"
 
 int jms_in;
-int jms_out;
+int JMSOUT_FILENO;
 
 int pipes_setup(int epoll_fd) {
   // Clear leftover files
@@ -47,8 +47,8 @@ int pipes_setup(int epoll_fd) {
   }
 
   // Open as read-write to avoid blocking if no reader
-  jms_out = open(JMS_OUT, O_RDWR | O_NONBLOCK | O_CLOEXEC);
-  if (jms_out < 0) {
+  JMSOUT_FILENO = open(JMS_OUT, O_RDWR | O_NONBLOCK | O_CLOEXEC);
+  if (JMSOUT_FILENO < 0) {
     epoll_ctl(epoll_fd, EPOLL_CTL_DEL, jms_in, &event);
     close(jms_in);
     unlink(JMS_IN);
@@ -56,21 +56,11 @@ int pipes_setup(int epoll_fd) {
     return -1;
   }
 
-  // TODO: Handle closing
-  // if (dup2(jms_out, STDOUT_FILENO) < 0) {
-  //   close(jms_out);
-  //   epoll_ctl(epoll_fd, EPOLL_CTL_DEL, jms_in, &event);
-  //   close(jms_in);
-  //   unlink(JMS_IN);
-  //   unlink(JMS_OUT);
-  //   return -1;
-  // }
-
   return jms_in;
 }
 
 void pipes_free() {
-  close(jms_out);
+  close(JMSOUT_FILENO);
   close(jms_in);
   unlink(JMS_IN);
   unlink(JMS_OUT);

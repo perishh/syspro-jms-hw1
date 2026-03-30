@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,7 +9,7 @@
 
 #include "command.h"
 
-#define BUFFER_SIZE 4096
+#define INITIAL_BUFFER_SIZE 4096
 
 void print_usage() {
   fprintf(stderr, "Usage: jms_console -w <jms_in> -r <jms_out> [-o "
@@ -17,10 +18,13 @@ void print_usage() {
 
 int out;
 Command *cmd = NULL;
+
 char *buffer = NULL;
+size_t buffer_size = 0;
 
 Action parse_action(const char *cmd);
 int read_commands(FILE *stream);
+int redirect(int fromfd, int tofd);
 
 int main(int argc, char **argv) {
   // Ignore SIGPIPE to prevent crashing when writing to closed pipe
@@ -75,9 +79,32 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  // TODO: Might need to open RW
+
+  int in = open(jms_out, O_RDONLY | O_NONBLOCK);
+  if (in < 0) {
+    if (errno == ENXIO) {
+      fprintf(stderr, "Coordinator is not running.\n");
+    } else {
+      perror("open (jms_out)");
+    }
+    return 1;
+  }
+
+  buffer_size = INITIAL_BUFFER_SIZE;
+  buffer = malloc(INITIAL_BUFFER_SIZE);
+  if (buffer == NULL) {
+    perror("malloc");
+    close(in);
+    close(out);
+    return 1;
+  }
+
   cmd = malloc(sizeof(Command));
   if (cmd == NULL) {
     perror("malloc");
+    free(buffer);
+    close(in);
     close(out);
     return 1;
   }
@@ -88,97 +115,124 @@ int main(int argc, char **argv) {
       perror("fopen");
       // Program can continue
     } else {
-      if (read_commands(ops) < 0) {
-        perror("read_commands (stdin)");
-
-        free(cmd);
-        free(buffer);
-        close(out);
-        return 1;
+      // ferror(3)
+      // While the is still unread data
+      while(feof(ops) == 0) {
+        if (read_commands(ops) < 0) {
+          perror("read_commands (stdin)");
+  
+          free(cmd);
+          free(buffer);
+          close(in);
+          close(out);
+          return 1;
+        }
       }
       fclose(ops);
     }
   }
 
-  // Forward stdin to jms_in
-  if (read_commands(stdin) < 0) {
-    perror("read_commands (stdin)");
+  // poll(2)
+  struct pollfd fds[2];
+  fds[0].fd = STDIN_FILENO;
+  fds[0].events = POLLIN;
 
-    free(cmd);
-    free(buffer);
-    close(out);
-    return 1;
+  fds[1].fd = in;
+  fds[1].events = POLLIN;
+
+  for (;;) {
+    int ret = poll(fds, 2, -1);
+    if (ret > 0) {
+      if (fds[0].revents & POLLIN) {
+        if (read_commands(stdin) >= 0) {
+          printf("Sent\n");
+        }
+      }
+      if (fds[1].revents & POLLIN) {
+        printf("writing\n");
+        redirect(in, STDOUT_FILENO);
+      }
+    } else {
+      perror("poll");
+      break;
+    }
   }
 
   free(cmd);
   free(buffer);
+  close(in);
   close(out);
 
   return 0;
 }
 
-int read_commands(FILE *stream) {
-  static size_t buffer_size;
-
-  // Potentially unsafe to write more than PIPE_BUF at once
+int redirect(int fromfd, int tofd) {
   ssize_t nread;
-  while ((nread = getline(&buffer, &buffer_size, stream)) > 0) {
-    // Parse command
-    char *action = strtok(buffer, " \n");
-    if (action == NULL) {
-      fprintf(stderr, "Invalid command.\n");
-      continue;
-    }
-
-    cmd->action = parse_action(action);
-    cmd->len = 0;
-    if (cmd->action == UNKNOWN) {
-      fprintf(stderr, "Invalid command.\n");
-      continue;
-    }
-
-    ssize_t arg_length_with_null = 0;
-    ssize_t action_length_with_null = strlen(action) + 1;
-
-    if ((cmd->action & ZERO_ARG_ACTIONS) != 0) {
-      if (nread > action_length_with_null) {
-        // Argument not empty
-        fprintf(stderr, "Unknown arguments.\n");
-        continue;
-      }
-    } else {
-      if (nread <= action_length_with_null && cmd->action != STATUS_ALL) {
-        // Argument empty
-        fprintf(stderr, "Arguments not found.\n");
-        continue;
-      }
-
-      arg_length_with_null = nread - action_length_with_null + 1;
-      cmd->len = arg_length_with_null - 1;
-    }
-
-    // Send command
-    if (write(out, cmd, sizeof(Command)) < 0) {
-      if (errno == EPIPE) {
-        fprintf(stderr, "Coordinator is no longer running.\n");
-      }
-      return -1;
-    }
-    printf("Command sent\n");
-    
-    if (write(out, buffer + action_length_with_null, arg_length_with_null) <
-    0) {
-      if (errno == EPIPE) {
-        fprintf(stderr, "Coordinator is no longer running.\n");
-      }
-      return -1;
-    }
-    printf("Arguments sent\n");
+  while ((nread = read(fromfd, buffer, buffer_size)) > 0) {
+    write(tofd, buffer, nread);
   }
-  // ferror(3)
-  // Distinguish end of file and error
-  if (feof(stream))
-    return 0;
+
+  return nread;
+}
+
+int read_commands(FILE *stream) {
+  // Potentially unsafe to write more than PIPE_BUF at once
+  ssize_t nread = getline(&buffer, &buffer_size, stream);
+  if (nread <= 0) {
+    // ferror(3)
+    if (feof(stream))
+      return 0;
+    return nread;
+  }
+  // Parse command
+  char *action = strtok(buffer, " \n");
+  if (action == NULL) {
+    fprintf(stderr, "Invalid command.\n");
+    return -1;
+  }
+
+  cmd->action = parse_action(action);
+  cmd->len = 0;
+  if (cmd->action == UNKNOWN) {
+    fprintf(stderr, "Invalid command.\n");
+    return -1;
+  }
+
+  ssize_t arg_length_with_null = 0;
+  ssize_t action_length_with_null = strlen(action) + 1;
+
+  if ((cmd->action & ZERO_ARG_ACTIONS) != 0) {
+    if (nread > action_length_with_null) {
+      // Argument not empty
+      fprintf(stderr, "Unknown arguments.\n");
+      return -1;
+    }
+  } else {
+    if (nread <= action_length_with_null && cmd->action != STATUS_ALL) {
+      // Argument empty
+      fprintf(stderr, "Arguments not found.\n");
+      return -1;
+    }
+
+    arg_length_with_null = nread - action_length_with_null + 1;
+    cmd->len = arg_length_with_null - 1;
+  }
+
+  // Send command
+  if (write(out, cmd, sizeof(Command)) < 0) {
+    if (errno == EPIPE) {
+      fprintf(stderr, "Coordinator is no longer running.\n");
+    }
+    return -1;
+  }
+
+  if (write(out, buffer + action_length_with_null, arg_length_with_null) < 0) {
+    if (errno == EPIPE) {
+      fprintf(stderr, "Coordinator is no longer running.\n");
+    }
+    return -1;
+  }
+
   return nread;
 }
 
