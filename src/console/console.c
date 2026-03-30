@@ -117,17 +117,7 @@ int main(int argc, char **argv) {
     } else {
       // ferror(3)
       // While the is still unread data
-      while(feof(ops) == 0) {
-        if (read_commands(ops) < 0) {
-          perror("read_commands (stdin)");
-  
-          free(cmd);
-          free(buffer);
-          close(in);
-          close(out);
-          return 1;
-        }
-      }
+      while(read_commands(ops) > 0) {}
       fclose(ops);
     }
   }
@@ -182,6 +172,7 @@ int read_commands(FILE *stream) {
       return 0;
     return nread;
   }
+
   // Parse command
   char *action = strtok(buffer, " \n");
   if (action == NULL) {
@@ -216,15 +207,16 @@ int read_commands(FILE *stream) {
     cmd->len = arg_length_with_null - 1;
   }
 
+  ssize_t written;
   // Send command
-  if (write(out, cmd, sizeof(Command)) < 0) {
+  if ((written = write(out, cmd, sizeof(Command))) < (long) sizeof(Command)) {
     if (errno == EPIPE) {
       fprintf(stderr, "Coordinator is no longer running.\n");
     }
     return -1;
   }
-
-  if (write(out, buffer + action_length_with_null, arg_length_with_null) < 0) {
+  
+  if ((written = write(out, buffer + action_length_with_null, arg_length_with_null)) < arg_length_with_null) {
     if (errno == EPIPE) {
       fprintf(stderr, "Coordinator is no longer running.\n");
     }

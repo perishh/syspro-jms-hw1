@@ -2,7 +2,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdlib.h>
 #include <unistd.h>
 
 #define MAX_EVENTS 10
@@ -24,7 +23,7 @@ int polling_init() {
     return -1;
   }
 
-  return EPOLL_FILENO;
+  return 0;
 }
 
 int polling_add(int fd) {

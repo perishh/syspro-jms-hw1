@@ -1,9 +1,25 @@
 #include "utils.h"
 
-#include <poll.h>
+#include <signal.h>
 #include <string.h>
 #include <sys/poll.h>
+#include <sys/signalfd.h>
+#include <sys/wait.h>
 #include <unistd.h>
+
+ssize_t read_blocking(int __fd, void *__buf, size_t __nbytes) {
+  // poll(2)
+  struct pollfd pfd;
+  pfd.fd = __fd;
+  pfd.events = POLLIN;
+
+  int ret = poll(&pfd, 1, -1);
+  if (ret <= 0) {
+    return ret;
+  }
+
+  return read(__fd, __buf, __nbytes);
+}
 
 // Delimiter is Space or \n (or NULL)
 int count_words(const char *args) {
@@ -40,16 +56,33 @@ int decode_args(char *raw, char **argv) {
   return 0;
 }
 
-ssize_t read_blocking(int __fd, void *__buf, size_t __nbytes) {
-  // poll(2)
-  struct pollfd pfd;
-  pfd.fd = __fd;
-  pfd.events = POLLIN;
-
-  int ret = poll(&pfd, 1, -1);
-  if(ret < 0) {
-    return ret;
+int decode_signal(int fd, SignalInfo *info) {
+  struct signalfd_siginfo siginfo;
+  ssize_t nread = read(fd, &siginfo, sizeof(struct signalfd_siginfo));
+  if (nread < 0) {
+    return -1;
   }
 
-  return read(__fd, __buf, __nbytes);
+  if (siginfo.ssi_signo == SIGCHLD) {
+    // wait(2)
+    int wstatus;
+    if (waitpid(siginfo.ssi_pid, &wstatus, WUNTRACED | WCONTINUED) < 0) {
+      return -1;
+    }
+
+    info->pid = siginfo.ssi_pid;
+    if (WIFSTOPPED(wstatus)) {
+      info->cause = STOPPED;
+    } else if (WIFCONTINUED(wstatus)) {
+      info->cause = CONTINUED;
+    } else if (WIFEXITED(wstatus)) {
+      info->cause = EXITED;
+    } else {
+      return -1;
+    }
+  } else {
+    return -1;
+  }
+
+  return 0;
 }
