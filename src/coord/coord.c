@@ -10,10 +10,9 @@
 #include "globals.h"
 #include "parser.h"
 #include "pipes.h"
+#include "polling.h"
 #include "pools.h"
 #include "signals.h"
-
-#define MAX_EVENTS 10
 
 int jobs_pool = 0;
 
@@ -35,20 +34,18 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // epoll(7), epoll_create(2)
-  int epoll_fd = epoll_create1(EPOLL_CLOEXEC);
-  if (epoll_fd < 0) {
-    perror("epoll_create");
+  if (polling_init() < 0) {
+    perror("epoll_init");
     pools_free();
     return 1;
   }
 
-  int jms_in = pipes_setup(epoll_fd);
+  int jms_in = pipes_setup();
   if (jms_in < 0) {
     perror("pipes setup");
 
     pools_free();
-    close(epoll_fd);
+    polling_free();
     return 1;
   }
 
@@ -57,31 +54,31 @@ int main(int argc, char **argv) {
   if (cmd_buffer == NULL) {
     perror("malloc");
 
-    close(epoll_fd);
+    polling_free();
     pools_free();
     pipes_free();
     return 1;
   }
 
   SignalInfo signal;
-  int signal_fd = signals_setup(epoll_fd);
+  int signal_fd = signals_setup();
   if (signal_fd < 0) {
     perror("setup signals");
 
     free(cmd_buffer);
-    close(epoll_fd);
+    polling_free();
     pools_free();
     pipes_free();
     return 1;
   }
-
-  struct epoll_event events[MAX_EVENTS];
+  
+  struct epoll_event *events;
   for (;;) {
-    int count = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
+    int count = polling_wait(&events);
     if (count < 0) {
-      close(epoll_fd);
       close(signal_fd);
       free(cmd_buffer);
+      polling_free();
       pools_free();
       pipes_free();
       return 1;
@@ -118,11 +115,11 @@ int main(int argc, char **argv) {
     }
   }
 
-  free(cmd_buffer);
-  close(epoll_fd);
-  close(signal_fd);
+  polling_free();
   pipes_free();
   pools_free();
+  close(signal_fd);
+  free(cmd_buffer);
 
   return 0;
 }

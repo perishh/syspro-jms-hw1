@@ -10,7 +10,7 @@ typedef struct {
   pid_t pid;
 } SignalInfo;
 
-int signals_setup(int epoll_fd);
+int signals_setup();
 int signals_read(int signal_fd, SignalInfo *info);
 
 #endif

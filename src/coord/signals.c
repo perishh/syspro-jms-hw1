@@ -6,7 +6,9 @@
 #include <unistd.h>
 #include <wait.h>
 
-int signals_setup(int epoll_fd) {
+#include "polling.h"
+
+int signals_setup() {
   // Add SIGCHLD to be watched for
   // TODO: also handle SIGINT SIGQUIT
   // sigsetops(3)
@@ -26,12 +28,8 @@ int signals_setup(int epoll_fd) {
   if (signal_fd < 0) {
     return -1;
   }
-
-  struct epoll_event event;
-
-  event.events = EPOLLIN;
-  event.data.fd = signal_fd;
-  if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, signal_fd, &event) < 0) {
+  
+  if(polling_add(signal_fd) < 0) {
     return -1;
   }
 

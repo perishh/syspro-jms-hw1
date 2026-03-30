@@ -6,7 +6,8 @@
 
 extern int JMSOUT_FILENO;
 
-int pipes_setup(int epoll_fd);
+int pipes_setup();
+void pipes_close();
 void pipes_free();
 
 #endif

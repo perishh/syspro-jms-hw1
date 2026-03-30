@@ -12,6 +12,7 @@
 #include "jobs.h"
 #include "list.h"
 #include "pipes.h"
+#include "polling.h"
 #include "utils.h"
 
 typedef struct {
@@ -67,7 +68,11 @@ int pools_start() {
   if (pool->pid == 0) {
     // Pool process
     // TODO: Close opened resources
-    jobs_init(pool->id);
+    int id = pool->id;
+    polling_free();
+    pipes_close();
+    pools_free();
+    jobs_init(id);
   }
 
   if (pool->pid < 0) {
@@ -171,7 +176,7 @@ int pools_enqueue(int len, char *args) {
 }
 
 void pools_free() {
-  // TODO: Free pool data
+  // TODO: Free pool data BUT NOT WHEN FREEING FROM FORK
   free(cmd_buffer);
   ll_free(&pools);
 }

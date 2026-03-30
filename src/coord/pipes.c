@@ -6,12 +6,13 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "polling.h"
 #include "globals.h"
 
 int jms_in;
 int JMSOUT_FILENO;
 
-int pipes_setup(int epoll_fd) {
+int pipes_setup() {
   // Clear leftover files
   unlink(JMS_IN);
   unlink(JMS_OUT);
@@ -35,11 +36,8 @@ int pipes_setup(int epoll_fd) {
     unlink(JMS_OUT);
     return jms_in;
   }
-
-  struct epoll_event event;
-  event.events = EPOLLIN;
-  event.data.fd = jms_in;
-  if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, jms_in, &event) < 0) {
+  
+  if (polling_add(jms_in) < 0) {
     close(jms_in);
     unlink(JMS_IN);
     unlink(JMS_OUT);
@@ -49,7 +47,7 @@ int pipes_setup(int epoll_fd) {
   // Open as read-write to avoid blocking if no reader
   JMSOUT_FILENO = open(JMS_OUT, O_RDWR | O_NONBLOCK | O_CLOEXEC);
   if (JMSOUT_FILENO < 0) {
-    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, jms_in, &event);
+    polling_remove(jms_in);
     close(jms_in);
     unlink(JMS_IN);
     unlink(JMS_OUT);
@@ -59,9 +57,13 @@ int pipes_setup(int epoll_fd) {
   return jms_in;
 }
 
-void pipes_free() {
+void pipes_close() {
   close(JMSOUT_FILENO);
   close(jms_in);
+}
+
+void pipes_free() {
+  pipes_close();
   unlink(JMS_IN);
   unlink(JMS_OUT);
 }
