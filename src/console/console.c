@@ -145,11 +145,9 @@ int main(int argc, char **argv) {
     if (ret > 0) {
       if (fds[0].revents & POLLIN) {
         if (read_commands(stdin) >= 0) {
-          printf("Sent\n");
         }
       }
       if (fds[1].revents & POLLIN) {
-        printf("writing\n");
         redirect(in, STDOUT_FILENO);
       }
     } else {

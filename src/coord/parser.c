@@ -65,7 +65,6 @@ int parse_commands(int in, Command** cmd_ptr, int* buffer_zize) {
   // Check current buffer size and expand if needed
   ssize_t required_space = sizeof(Command) + (*cmd_ptr)->len + 2; // \0 + EOF
   if ((*buffer_zize) < required_space) {
-    printf("%d Requesting %ld\n", getpid(),required_space);
     // TODO: CHECK STATIC MEMBERS FOR INVALID DATA WHEN FORKING
     Command *temp = realloc((*cmd_ptr), required_space);
     if (temp == NULL) {
@@ -87,8 +86,6 @@ int parse_commands(int in, Command** cmd_ptr, int* buffer_zize) {
     printf("Malformed arguments\n");
     return -1;
   }
-
-  printf("%d Sent request\n", getpid());
 
   return 0;
 }

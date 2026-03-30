@@ -94,12 +94,10 @@ int main(int argc, char **argv) {
         }
         // TODO: Handle
       } else if (events[i].data.fd == jms_in) {
-        printf("There is data in input fifo\n");
         // Command received
         if (parse_commands(jms_in, &cmd_buffer, &buffer_size) < 0) {
           continue;
         }
-        printf("Action: %d %s\n", cmd_buffer->action, cmd_buffer->args);
         switch (cmd_buffer->action) {
         case SUBMIT:
           pools_enqueue(cmd_buffer->len, cmd_buffer->args);

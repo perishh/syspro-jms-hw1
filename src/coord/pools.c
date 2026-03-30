@@ -112,8 +112,6 @@ Pool *find_or_start() {
 int send_and_receive(const Pool *pool, const char *args) {
   char str[32];
 
-  // TODO: Race condition a pool might have exited by
-  // the time the request to submit a new job is sent
   sprintf(str, "pool_%d_out", pool->id);
   int in = open(str, O_RDONLY | O_NONBLOCK);
   if (in < 0) {

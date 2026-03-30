@@ -1,15 +1,16 @@
 #include "jobs.h"
 
 #include <fcntl.h>
+#include <poll.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/epoll.h>
+#include <sys/signalfd.h>
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
 #include "globals.h"
-#include "list.h"
 #include "outputs.h"
 #include "parser.h"
 #include "signals.h"
@@ -21,28 +22,32 @@
 int PIPEIN;
 FILE *PIPEOUT;
 
-#define SENDF(fmt, ...) {fprintf(PIPEOUT, fmt __VA_OPT__(,) __VA_ARGS__);fflush(PIPEOUT);}
+#define SENDF(fmt, ...)                                                        \
+  {                                                                            \
+    fprintf(PIPEOUT, fmt __VA_OPT__(, ) __VA_ARGS__);                          \
+    fflush(PIPEOUT);                                                           \
+  }
 
-int init_pipes(int id, int epoll_fd);
+int init_pipes(int id);
 void close_pipes();
-
-int active = 0;
+int setup_signals();
 
 typedef struct {
   int id;
   pid_t pid; // 0 indicates empty slot
-  int running;
+  int suspended;
+  int finished;
   time_t timestamp;
 } Job;
 
-LinkedList jobs;
-LinkedList finished;
+int size = 0;
+int finished = 0;
+Job *jobs;
 
 int jobs_add(int id, char *raw) {
-  if (active >= jobs_pool) {
+  if (size >= jobs_pool) {
     return -1;
   }
-  active++;
 
   int argc = count_words(raw);
   char *argv[argc + 1]; // Account for terminating NULL; TODO: Consider malloc
@@ -50,16 +55,14 @@ int jobs_add(int id, char *raw) {
     return -1;
   }
 
-  Job *job = malloc(sizeof(Job));
-  if (job == NULL) {
-    return -1;
-  }
+  Job *job = &jobs[size++];
 
   job->id = id;
-  job->running = 1;
+  job->suspended = 0;
+  job->finished = 0;
   // time(2)
   job->timestamp = time(NULL);
-  
+
   // fork(2)
   job->pid = fork();
   if (job->pid == 0) {
@@ -83,11 +86,7 @@ int jobs_add(int id, char *raw) {
   }
 
   if (job->pid < 0) {
-    free(job);
-    return -1;
-  }
-
-  if (ll_push(&jobs, job) < 0) {
+    size--;
     return -1;
   }
 
@@ -95,22 +94,111 @@ int jobs_add(int id, char *raw) {
   return 0;
 }
 
+int jobs_suspend(int id) {
+  Job *job = NULL;
+  for (int i = 0; i < size; i++) {
+    if (jobs[i].id == id) {
+      job = &jobs[i];
+      break;
+    }
+  }
+
+  if (job == NULL || job->finished || job->suspended) {
+    return -1;
+  }
+
+  // kill(2)
+  if (kill(job->pid, SIGSTOP) < 0) {
+    return -1;
+  }
+
+  SENDF("Sent suspend signal to JobID %d\n", id);
+  return 0;
+}
+
+int jobs_resume(int id) {
+  Job *job = NULL;
+  for (int i = 0; i < size; i++) {
+    if (jobs[i].id == id) {
+      job = &jobs[i];
+      break;
+    }
+  }
+
+  if (job == NULL || job->finished || !job->suspended) {
+    return -1;
+  }
+
+  // kill(2)
+  if (kill(job->pid, SIGCONT) < 0) {
+    return -1;
+  }
+
+  SENDF("Sent resume signal to JobID %d\n", id);
+  return 0;
+}
+
+int jobs_continued(pid_t pid) {
+  Job *job = NULL;
+  for (int i = 0; i < size; i++) {
+    if (jobs[i].pid == pid) {
+      job = &jobs[i];
+      break;
+    }
+  }
+
+  if (job == NULL) {
+    return -1;
+  }
+
+  job->suspended = 0;
+  return 0;
+}
+
+int jobs_stopped(pid_t pid) {
+  Job *job = NULL;
+  for (int i = 0; i < size; i++) {
+    if (jobs[i].pid == pid) {
+      job = &jobs[i];
+      break;
+    }
+  }
+
+  if (job == NULL) {
+    return -1;
+  }
+
+  job->suspended = 1;
+  return 0;
+}
+
+int jobs_exited(pid_t pid) {
+  Job *job = NULL;
+  for (int i = 0; i < size; i++) {
+    if (jobs[i].pid == pid) {
+      job = &jobs[i];
+      break;
+    }
+  }
+
+  if (job == NULL) {
+    return -1;
+  }
+
+  job->finished = 1;
+  return 0;
+}
+
 void jobs_init(int id) {
   // Pool process entry point
-  ll_init(&jobs);
-  ll_init(&finished);
 
-  int epoll_fd = epoll_create1(EPOLL_CLOEXEC);
-  if (epoll_fd < 0) {
-    ll_free(&jobs);
-    ll_free(&finished);
+  if (init_pipes(id) < 0) {
     exit(1);
   }
 
-  if (init_pipes(id, epoll_fd) < 0) {
-    close(epoll_fd);
-    ll_free(&jobs);
-    ll_free(&finished);
+  jobs = malloc(sizeof(Job) * jobs_pool);
+  if (jobs == NULL) {
+    close_pipes();
     exit(1);
   }
 
@@ -118,80 +206,106 @@ void jobs_init(int id) {
   Command *cmd_buffer = malloc(buffer_size);
   if (cmd_buffer == NULL) {
     close_pipes();
-    close(epoll_fd);
-    ll_free(&jobs);
-    ll_free(&finished);
+    free(jobs);
     exit(1);
   }
 
   SignalInfo signal;
-  int signal_fd = signals_setup(epoll_fd);
+  int signal_fd = setup_signals();
   if (signal_fd < 0) {
     close_pipes();
-    close(epoll_fd);
-    ll_free(&jobs);
-    ll_free(&finished);
+    free(jobs);
+    free(cmd_buffer);
     exit(1);
   }
 
-  int max_events = jobs_pool + 1;
-  struct epoll_event *events =
-      malloc(sizeof(struct epoll_event) * (max_events));
-  if (events == NULL) {
-    close_pipes();
-    close(epoll_fd);
-    ll_free(&jobs);
-    ll_free(&finished);
-    exit(1);
-  }
+  struct pollfd fds[2];
+  fds[0].fd = PIPEIN;
+  fds[0].events = POLLIN;
+
+  fds[1].fd = signal_fd;
+  fds[1].events = POLLIN;
+
   for (;;) {
-    int count = epoll_wait(epoll_fd, events, max_events, -1);
-    if (count < 0) {
+    int ret = poll(fds, 2, -1);
+    if (ret <= 0) {
       // TODO
       break;
     }
-    for (int i = 0; i < count; i++) {
-      if (events[i].data.fd == PIPEIN) {
-        if (parse_commands(PIPEIN, &cmd_buffer, &buffer_size) < 0) {
-          continue;
-        }
+
+    if (fds[0].revents & POLLIN) {
+      if (parse_commands(PIPEIN, &cmd_buffer, &buffer_size) >= 0) {
         switch (cmd_buffer->action) {
         case SUBMIT:
           jobs_add(cmd_buffer->data, cmd_buffer->args);
+          break;
+        case SUSPEND:
+          jobs_suspend(atoi(cmd_buffer->args));
+          break;
+        case RESUME:
+          jobs_resume(atoi(cmd_buffer->args));
           break;
         case STATUS:
         case STATUS_ALL:
         case SHOW_ACTIVE:
         case SHOW_POOLS:
         case SHOW_FINISHED:
-        case SUSPEND:
-        case RESUME:
         case SHUTDOWN:
         case UNKNOWN:
           break;
         }
-        // TODO
-      } else if (events[i].data.fd == signal_fd) {
-        if (signals_read(signal_fd, &signal) < 0) {
-          continue;
+      }
+    }
+
+    if (fds[1].revents & POLLIN) {
+      if (signals_read(signal_fd, &signal) >= 0) {
+        switch (signal.cause) {
+        case STOPPED:
+          jobs_stopped(signal.pid);
+          break;
+        case CONTINUED:
+          jobs_continued(signal.pid);
+          break;
+        case EXITED:
+          jobs_exited(signal.pid);
+          break;
         }
-        // TODO
       }
     }
   }
 
-  free(events);
   close(signal_fd);
-  close(epoll_fd);
-  ll_free(&jobs);
-  ll_free(&finished);
-
+  free(jobs);
+  free(cmd_buffer);
   close_pipes();
 
   exit(0);
 }
 
-int init_pipes(int id, int epoll_fd) {
+int setup_signals() {
+  // TODO: also handle SIGKILL
+  // sigsetops(3)
+  sigset_t signals;
+  if (sigemptyset(&signals) < 0 || sigaddset(&signals, SIGCHLD) < 0) {
+    return -1;
+  }
+
+  // Block default handling of signals
+  // sigprocmask(2)
+  if (sigprocmask(SIG_BLOCK, &signals, NULL) < 0) {
+    return -1;
+  }
+
+  // signalfd(2)
+  int signal_fd = signalfd(-1, &signals, SFD_CLOEXEC | SFD_NONBLOCK);
+  if (signal_fd < 0) {
+    return -1;
+  }
+
+  return signal_fd;
+}
+
+int init_pipes(int id) {
   char str[32];
   sprintf(str, "pool_%d_in", id);
 
@@ -205,15 +319,6 @@ int init_pipes(int id, int epoll_fd) {
   PIPEOUT = fopen(str, "r+e");
   if (PIPEOUT == NULL) {
     close(PIPEIN);
-    return -1;
-  }
-
-  struct epoll_event event;
-  event.events = EPOLLIN;
-  event.data.fd = PIPEIN;
-  if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, PIPEIN, &event) < 0) {
-    close(PIPEIN);
-    fclose(PIPEOUT);
     return -1;
   }
 
