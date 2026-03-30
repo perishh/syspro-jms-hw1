@@ -189,6 +189,78 @@ int jobs_exited(pid_t pid) {
   return 0;
 }
 
+void jobs_show_active() {
+  int found = 0;
+  for (int i = 0; i < size; i++) {
+    Job *j = &jobs[i];
+    if (!j->finished && !j->suspended) {
+      found = 1;
+      fprintf(PIPEOUT, "JobID %d\n", j->id);
+    }
+  }
+  if (found) {
+    fflush(PIPEOUT);
+  }
+}
+
+void jobs_show_finished() {
+  int found = 0;
+  for (int i = 0; i < size; i++) {
+    Job *j = &jobs[i];
+    if (j->finished) {
+      found = 1;
+      fprintf(PIPEOUT, "JobID %d\n", j->id);
+    }
+  }
+  if (found) {
+    fflush(PIPEOUT);
+  }
+}
+
+int jobs_status(int id) {
+  Job *j = NULL;
+  for (int i = 0; i < size; i++) {
+    if (jobs[i].id == id) {
+      j = &jobs[i];
+    }
+  }
+
+  if (j == NULL) {
+    return -1;
+  }
+
+  if (j->finished) {
+    printf("JobID %d Status:\tFinished\n", id);
+  } else if (j->suspended) {
+    printf("JobID %d Status:\tSuspended\n", id);
+  } else {
+    time_t now = time(NULL);
+    int elapsed = now - (j->timestamp);
+    printf("JobID %d Status:\tActive (running for %d sec)\n", id, elapsed);
+  }
+
+  return 0;
+}
+
+void jobs_status_all(int n) {
+  time_t now = time(NULL);
+
+  for (int i = 0; i < size; i++) {
+    Job *j = &jobs[i];
+    int elapsed = now - j->timestamp;
+    if (n <= 0 || elapsed <= n) {
+      if (j->finished) {
+        printf("JobID %d Status:\tFinished\n", j->id);
+      } else if (j->suspended) {
+        printf("JobID %d Status:\tSuspended\n", j->id);
+      } else {
+        printf("JobID %d Status:\tActive (running for %d sec)\n", j->id,
+               elapsed);
+      }
+    }
+  }
+}
+
 void jobs_init(int id) {
   // Pool process entry point
 
@@ -245,12 +317,20 @@ void jobs_init(int id) {
         case RESUME:
           jobs_resume(atoi(cmd_buffer->args));
           break;
-        case STATUS:
-        case STATUS_ALL:
         case SHOW_ACTIVE:
-        case SHOW_POOLS:
+          jobs_show_active();
+          break;
         case SHOW_FINISHED:
+          jobs_show_finished();
+          break;
+        case STATUS:
+          jobs_status(atoi(cmd_buffer->args));
+          break;
+        case STATUS_ALL:
+          jobs_status_all(atoi(cmd_buffer->args));
+          break;
         case SHUTDOWN:
+        case SHOW_POOLS:
         case UNKNOWN:
           break;
         }
@@ -324,6 +404,7 @@ int init_pipes(int id) {
 
   return 0;
 }
+
 void close_pipes() {
   close(PIPEIN);
   fclose(PIPEOUT);

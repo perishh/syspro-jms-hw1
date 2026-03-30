@@ -1,13 +1,11 @@
 #include "parser.h"
 
-#include <errno.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
 #include "command.h"
-#include "jobs.h"
 #include "utils.h"
 
 void print_usage() {
