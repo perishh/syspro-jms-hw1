@@ -4,14 +4,16 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/poll.h>
 #include <sys/signalfd.h>
 #include <unistd.h>
+#include <wait.h>
 
+#include "args.h"
 #include "cmd.h"
 #include "command.h"
 #include "job.h"
-#include "utils.h"
 
 int POOL_ID;
 int PIPEIN_FILENO;
@@ -66,6 +68,8 @@ int proc_sig_init() {
 
 void proc_sig_free() { close(SIG_FILENO); }
 
+static int exited = 0;
+
 int proc_main(int id) {
   POOL_ID = id;
   proc_io_init();
@@ -98,7 +102,7 @@ int proc_main(int id) {
           job_status(atoi(cmd->args));
           break;
         case STATUS_ALL:
-          job_status(atoi(cmd->args));
+          job_status_all(atoi(cmd->args));
           break;
         case SHOW_ACTIVE:
           job_show_active();
@@ -107,10 +111,10 @@ int proc_main(int id) {
           job_show_finished();
           break;
         case SUSPEND:
-          job_status(atoi(cmd->args));
+          job_suspend(atoi(cmd->args));
           break;
         case RESUME:
-          job_status(atoi(cmd->args));
+          job_resume(atoi(cmd->args));
           break;
         case SHUTDOWN:
         case SHOW_POOLS:
@@ -121,18 +125,31 @@ int proc_main(int id) {
     }
 
     if (fds[1].revents & POLLIN) {
-      SignalInfo sig;
-      if (decode_signal(SIG_FILENO, &sig) >= 0) {
-        switch (sig.cause) {
-        case STOPPED:
-          job_stopped(sig.pid);
-          break;
-        case CONTINUED:
-          job_continued(sig.pid);
-          break;
-        case EXITED:
-          job_exited(sig.pid);
-          break;
+
+      struct signalfd_siginfo siginfo;
+      ssize_t nread =
+          read(SIG_FILENO, &siginfo, sizeof(struct signalfd_siginfo));
+      if (nread < 0) {
+        continue;
+      }
+
+      if (siginfo.ssi_signo == SIGCHLD) {
+        // wait(2)
+        int wstatus;
+        pid_t pid;
+        while ((pid = waitpid(-1, &wstatus, WUNTRACED | WCONTINUED | WNOHANG)) >
+               0) {
+          if (WIFSTOPPED(wstatus)) {
+            job_stopped(pid);
+          } else if (WIFCONTINUED(wstatus)) {
+            job_continued(pid);
+          } else if (WIFEXITED(wstatus)) {
+            job_exited(pid);
+            exited++;
+            if (exited == get_jobs_pool()) {
+              sendf("All jobs done I can close\n");
+            }
+          }
         }
       }
     }

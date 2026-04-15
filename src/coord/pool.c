@@ -21,14 +21,14 @@
 typedef struct {
   int id;
   pid_t pid;
-  int active;
+  int jobs;
 } Pool;
 
-static char* buffer  = NULL;
+static char *buffer = NULL;
 
 int pool_redirect(int fd) {
-  ssize_t nread = read(fd, buffer, 4096);
-  if(nread <= 0) {
+  ssize_t nread = read(fd, buffer, BUFFER_SIZE);
+  if (nread <= 0) {
     return nread;
   }
 
@@ -73,21 +73,21 @@ int pool_io_init(int id) {
   return 0;
 }
 
-int pool_send(const Command* cmd, int id) {
+int pool_send(const Command *cmd, int id) {
   char str[32];
   sprintf(str, "pool_%d_in", id);
 
   int out = open(str, O_RDWR | O_NONBLOCK | O_CLOEXEC);
-  if(out < 0) {
+  if (out < 0) {
     return -1;
   }
 
-  if(write(out, cmd, sizeof(Command)) <= 0) {
+  if (write(out, cmd, sizeof(Command)) <= 0) {
     close(out);
     return -1;
   }
 
-  if(write(out, cmd->args, cmd->len + 1) < 0) {
+  if (write(out, cmd->args, cmd->len + 1) < 0) {
     close(out);
     return -1;
   }
@@ -100,18 +100,18 @@ LinkedList pools;
 int pool_key = 1;
 
 int pool_start() {
-  Pool* pool = malloc(sizeof(Pool));
-  if(pool == NULL) {
+  Pool *pool = malloc(sizeof(Pool));
+  if (pool == NULL) {
     return -1;
   }
 
   pool->id = pool_key++;
-  pool->active = 0;
+  pool->jobs = 0;
 
   pool_io_init(pool->id);
 
   pool->pid = fork();
-  if(pool->pid == 0) {
+  if (pool->pid == 0) {
     int id = pool->id;
 
     free(pool);
@@ -124,7 +124,7 @@ int pool_start() {
     _exit(proc_main(id));
   }
 
-  if(ll_push(&pools, pool) < 0) {
+  if (ll_push(&pools, pool) < 0) {
     free(pool);
     return -1;
   }
@@ -132,11 +132,10 @@ int pool_start() {
   return 0;
 }
 
-
 int pool_init() {
   ll_init(&pools);
   buffer = malloc(BUFFER_SIZE);
-  if(buffer == NULL) {
+  if (buffer == NULL) {
     return -1;
   }
 
@@ -149,24 +148,44 @@ void pool_free() {
 }
 
 int job_key = 1;
-int pool_submit(Command* cmd) {
-  if(pools.size == 0) {
+int pool_submit(Command *cmd) {
+  if (pools.size == 0) {
     pool_start();
   }
-  Pool *pool = (Pool*) pools.front->data;
-  if(pool->active >= get_jobs_pool()) {
+
+  Pool *pool = (Pool *)pools.front->data;
+  if (pool->jobs >= get_jobs_pool()) {
+    // Pool full, create new
     pool_start();
-    pool = (Pool*) pools.front->data;
+    pool = (Pool *)pools.front->data;
   }
 
   // Set job id
   cmd->data = job_key++;
 
-  if(pool_send(cmd, pool->id) < 0) {
+  if (pool_send(cmd, pool->id) < 0) {
     free(pool);
     return -1;
   }
 
-  pool->active++;
+  pool->jobs++;
   return 0;
+}
+
+void pool_broadcast(Command *cmd) {
+  Pool *p;
+  FOR_EACH(pools, node) {
+    p = (Pool *)node->data;
+    pool_send(cmd, p->id);
+  }
+}
+
+void pool_show() {
+  write(JMSOUT_FILENO, "Pool & NumOfJobs:\n", 19);
+  Pool *p;
+  FOR_EACH(pools, node) {
+    p = (Pool *)node->data;
+    int n = snprintf(buffer, BUFFER_SIZE, "%d %d\n", p->pid, p->jobs);
+    write(JMSOUT_FILENO, buffer, n + 1); // For \0
+  }
 }

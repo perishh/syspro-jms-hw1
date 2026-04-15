@@ -219,7 +219,7 @@ void job_status_all(int n) {
         sendf("JobID %d Status:\tSuspended\n", j->id);
       } else {
         sendf("JobID %d Status:\tActive (running for %d sec)\n", j->id,
-               elapsed);
+              elapsed);
       }
     }
   }

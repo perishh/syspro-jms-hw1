@@ -1,5 +1,6 @@
 #include "cmd.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -56,7 +57,7 @@ Command *cmd_read(int fd) {
     return NULL;
   }
 
-    // Ensure null termination
+  // Ensure null termination
   if (buffer->args[buffer->len] != '\0') {
     printf("Malformed arguments\n");
     return NULL;

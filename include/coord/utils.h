@@ -2,7 +2,6 @@
 #define UTILS_H
 
 #include <sys/types.h>
-#include <stdio.h>
 
 typedef enum { STOPPED, CONTINUED, EXITED } Cause;
 

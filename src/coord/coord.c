@@ -32,12 +32,36 @@ int main(int argc, char **argv) {
         if (cmd == NULL) {
           continue;
         }
-        pool_submit(cmd);
+
+        switch (cmd->action) {
+        case SUBMIT:
+          pool_submit(cmd);
+          break;
+        case SUSPEND:
+        case RESUME:
+        case STATUS_ALL:
+        case SHOW_ACTIVE:
+        case STATUS:
+          pool_broadcast(cmd);
+          break;
+        case SHOW_FINISHED:
+          pool_broadcast(cmd);
+          // TODO: Show finished pools' jobs
+          break;
+        case SHOW_POOLS:
+          pool_show();
+          break;
+        case SHUTDOWN:
+        // TODO
+        case UNKNOWN:
+          break;
+        }
       } else if (events[i].data.fd == SIG_FILENO) {
         SignalInfo sig;
-        if(decode_signal(SIG_FILENO, &sig) < 0) {
+        if (decode_signal(SIG_FILENO, &sig) < 0) {
           continue;
         }
+        // TODO
       } else {
         // Input from pool process
         pool_redirect(events[i].data.fd);
