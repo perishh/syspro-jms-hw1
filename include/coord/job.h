@@ -15,5 +15,6 @@ void job_show_finished();
 int job_status(int id);
 void job_status_all(int n);
 void job_show_active();
+int job_shutdown();
 
 #endif

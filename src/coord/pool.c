@@ -186,6 +186,8 @@ void pool_show() {
   FOR_EACH(pools, node) {
     p = (Pool *)node->data;
     int n = snprintf(buffer, BUFFER_SIZE, "%d %d\n", p->pid, p->jobs);
-    write(JMSOUT_FILENO, buffer, n + 1); // For \0
+    if (n < BUFFER_SIZE) {
+      write(JMSOUT_FILENO, buffer, n + 1); // For \0
+    }
   }
 }

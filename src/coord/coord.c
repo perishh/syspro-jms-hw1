@@ -19,6 +19,8 @@ int main(int argc, char **argv) {
   sig_init();
   pool_init();
 
+  int shutting_down = 0;
+
   struct epoll_event *events;
   for (;;) {
     int count = polling_wait(&events);
@@ -35,10 +37,16 @@ int main(int argc, char **argv) {
 
         switch (cmd->action) {
         case SUBMIT:
-          pool_submit(cmd);
+          if (!shutting_down) {
+            pool_submit(cmd);
+          }
           break;
         case SUSPEND:
         case RESUME:
+          if (!shutting_down) {
+            pool_broadcast(cmd);
+          }
+          break;
         case STATUS_ALL:
         case SHOW_ACTIVE:
         case STATUS:
@@ -52,7 +60,9 @@ int main(int argc, char **argv) {
           pool_show();
           break;
         case SHUTDOWN:
-        // TODO
+          // TODO
+          pool_broadcast(cmd);
+          break;
         case UNKNOWN:
           break;
         }
@@ -61,7 +71,7 @@ int main(int argc, char **argv) {
         if (decode_signal(SIG_FILENO, &sig) < 0) {
           continue;
         }
-        // TODO
+        // TODO: Also fix multiple signal decoding (like pools')
       } else {
         // Input from pool process
         pool_redirect(events[i].data.fd);

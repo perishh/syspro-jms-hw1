@@ -329,4 +329,16 @@ int job_init() {
   return 0;
 }
 
+int job_shutdown() {
+  int in_progress = 0;
+  for (int i = 0; i < size; i++) {
+    Job *job = &jobs[i];
+    if (!job->finished) {
+      in_progress++;
+      kill(job->pid, SIGTERM);
+    }
+  }
+  return in_progress;
+}
+
 void job_free() { free(jobs); }

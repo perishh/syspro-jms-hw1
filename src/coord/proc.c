@@ -47,7 +47,8 @@ static int SIG_FILENO;
 int proc_sig_init() {
   // sigsetops(3)
   sigset_t signals;
-  if (sigemptyset(&signals) < 0 || sigaddset(&signals, SIGCHLD) < 0) {
+  if (sigemptyset(&signals) < 0 || sigaddset(&signals, SIGCHLD) < 0 ||
+      sigaddset(&signals, SIGTERM) < 0) {
     return -1;
   }
 
@@ -82,6 +83,9 @@ int proc_main(int id) {
   fds[0].events = POLLIN;
   fds[1].fd = SIG_FILENO;
   fds[1].events = POLLIN;
+
+  int stop_received = 0;
+  int in_progress = 0;
 
   for (;;) {
     int ret = poll(fds, 2, -1);
@@ -150,6 +154,12 @@ int proc_main(int id) {
               sendf("All jobs done I can close\n");
             }
           }
+        }
+      } else if (siginfo.ssi_signo == SIGTERM) {
+        // Graceful shutdown
+        if (!stop_received) {
+          stop_received = 1;
+          in_progress = job_shutdown();
         }
       }
     }
