@@ -53,8 +53,7 @@ int main(int argc, char **argv) {
           pool_broadcast(cmd);
           break;
         case SHOW_FINISHED:
-          pool_broadcast(cmd);
-          // TODO: Show finished pools' jobs
+          pool_finished();
           break;
         case SHOW_POOLS:
           pool_show();

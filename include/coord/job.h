@@ -3,6 +3,14 @@
 
 #include <sys/types.h>
 
+typedef struct {
+  int id;
+  pid_t pid;
+  int suspended;
+  int finished;
+  time_t timestamp;
+} Job;
+
 int job_init();
 void job_free();
 int job_add(int id, char *raw);

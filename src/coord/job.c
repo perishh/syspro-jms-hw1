@@ -12,14 +12,6 @@
 #include "proc.h"
 #include "utils.h"
 
-typedef struct {
-  int id;
-  pid_t pid;
-  int suspended;
-  int finished;
-  time_t timestamp;
-} Job;
-
 #define DATETIME_SIZE 16 // Including \0
 
 int job_proc_cd(int id, time_t timestamp) {
@@ -273,6 +265,7 @@ int job_exited(pid_t pid) {
   }
 
   job->finished = 1;
+  send_job(job);
   return 0;
 }
 

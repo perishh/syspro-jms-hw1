@@ -2,7 +2,7 @@
 #define LIST_H
 
 typedef struct Node {
-  const void *data;
+  void *data;
   struct Node *next;
 } Node;
 

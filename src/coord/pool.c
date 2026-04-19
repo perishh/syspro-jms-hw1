@@ -11,12 +11,14 @@
 #include "command.h"
 #include "globals.h"
 #include "io.h"
+#include "job.h"
 #include "list.h"
 #include "polling.h"
 #include "proc.h"
 #include "sig.h"
+#include "utils.h"
 
-#define BUFFER_SIZE 4096
+#define INITIAL_BUFFER_SIZE 4096
 
 typedef struct {
   int id;
@@ -25,14 +27,41 @@ typedef struct {
 } Pool;
 
 static char *buffer = NULL;
+static ssize_t buffer_size;
+
+LinkedList finished_jobs;
 
 int pool_redirect(int fd) {
-  ssize_t nread = read(fd, buffer, BUFFER_SIZE);
-  if (nread <= 0) {
+  static PoolMessage msg;
+  ssize_t nread = read(fd, &msg, sizeof(PoolMessage));
+  if (nread != sizeof(PoolMessage)) {
     return nread;
   }
 
-  return write(JMSOUT_FILENO, buffer, nread);
+  if (buffer_size < msg.length) {
+    char *temp = realloc(buffer, msg.length);
+    if (temp == NULL) {
+      return -1;
+    }
+    buffer_size = msg.length;
+    buffer = temp;
+  }
+  nread = read_blocking(fd, buffer, msg.length);
+
+  if (msg.isText) {
+    return write(JMSOUT_FILENO, buffer, nread);
+  }
+
+  for (char *i = buffer; i < buffer + msg.length; i += sizeof(Job)) {
+    Job *j = malloc(sizeof(Job));
+    if (j != NULL) {
+      *j = *((Job *)i);
+      printf("Received job finish %d %d\n", j->id, j->pid);
+      ll_push(&finished_jobs, j);
+    }
+  }
+
+  return 0;
 }
 
 int pool_io_init(int id) {
@@ -134,7 +163,9 @@ int pool_start() {
 
 int pool_init() {
   ll_init(&pools);
-  buffer = malloc(BUFFER_SIZE);
+  ll_init(&finished_jobs);
+  buffer_size = INITIAL_BUFFER_SIZE;
+  buffer = malloc(INITIAL_BUFFER_SIZE);
   if (buffer == NULL) {
     return -1;
   }
@@ -143,7 +174,10 @@ int pool_init() {
 }
 
 void pool_free() {
+  FOR_EACH(pools, node) { free(node->data); }
+  FOR_EACH(finished_jobs, node) { free(node->data); }
   ll_free(&pools);
+  ll_free(&finished_jobs);
   free(buffer);
 }
 
@@ -180,13 +214,26 @@ void pool_broadcast(Command *cmd) {
   }
 }
 
+void pool_finished() {
+  write(JMSOUT_FILENO, "Finished jobs:\n", 16);
+
+  Job *j;
+  FOR_EACH(finished_jobs, node) {
+    j = (Job *)node->data;
+    int n = snprintf(buffer, buffer_size, "JobID %d\n", j->id);
+    if (n < buffer_size) {
+      write(JMSOUT_FILENO, buffer, n + 1); // For \0
+    }
+  }
+}
+
 void pool_show() {
   write(JMSOUT_FILENO, "Pool & NumOfJobs:\n", 19);
   Pool *p;
   FOR_EACH(pools, node) {
     p = (Pool *)node->data;
-    int n = snprintf(buffer, BUFFER_SIZE, "%d %d\n", p->pid, p->jobs);
-    if (n < BUFFER_SIZE) {
+    int n = snprintf(buffer, buffer_size, "%d %d\n", p->pid, p->jobs);
+    if (n < buffer_size) {
       write(JMSOUT_FILENO, buffer, n + 1); // For \0
     }
   }

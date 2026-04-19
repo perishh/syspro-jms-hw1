@@ -29,7 +29,7 @@ int proc_io_init() {
   }
 
   sprintf(str, "pool_%d_out", POOL_ID);
-  pipeout = fopen(str, "r+e");
+  pipeout = fopen(str, "r+be");
   if (pipeout == NULL) {
     close(PIPEIN_FILENO);
     return -1;
@@ -86,6 +86,8 @@ int proc_main(int id) {
 
   int stop_received = 0;
   int in_progress = 0;
+
+  // TODO: Handle stop received
 
   for (;;) {
     int ret = poll(fds, 2, -1);
