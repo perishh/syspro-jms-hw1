@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "args.h"
@@ -56,7 +57,6 @@ int pool_redirect(int fd) {
     Job *j = malloc(sizeof(Job));
     if (j != NULL) {
       *j = *((Job *)i);
-      printf("Received job finish %d %d\n", j->id, j->pid);
       ll_push(&finished_jobs, j);
     }
   }
@@ -236,5 +236,37 @@ void pool_show() {
     if (n < buffer_size) {
       write(JMSOUT_FILENO, buffer, n + 1); // For \0
     }
+  }
+}
+
+int total_exited = 0;
+int total_in_progress = 0;
+
+int pool_exited(int status) {
+  total_exited++;
+  if (status > 0) {
+    total_in_progress += status;
+  }
+  return total_exited == pools.size;
+}
+
+int pool_shutdown() {
+  if (total_exited == pools.size) {
+    // NO POOLS ACTIVE
+    return 1;
+  }
+  FOR_EACH(pools, node) {
+    Pool *p = (Pool *)node->data;
+    kill(p->pid, SIGTERM);
+  }
+  return 0;
+}
+
+void pool_print_info() {
+  int n = snprintf(buffer, buffer_size,
+                   "Served %d jobs, %d were still in progress\n",
+                   finished_jobs.size, total_in_progress);
+  if (n < buffer_size) {
+    write(JMSOUT_FILENO, buffer, n + 1); // For \0
   }
 }

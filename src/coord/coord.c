@@ -1,5 +1,8 @@
+#include <signal.h>
 #include <stdio.h>
 #include <sys/epoll.h>
+#include <sys/signalfd.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "args.h"
@@ -9,7 +12,6 @@
 #include "polling.h"
 #include "pool.h"
 #include "sig.h"
-#include "utils.h"
 
 int main(int argc, char **argv) {
   args_init(argc, argv);
@@ -48,8 +50,10 @@ int main(int argc, char **argv) {
           }
           break;
         case STATUS_ALL:
+        // TODO: FIX BUG WHEN NO ARGUMENT
         case SHOW_ACTIVE:
         case STATUS:
+          // TODO: Break down command to include finished jobs
           pool_broadcast(cmd);
           break;
         case SHOW_FINISHED:
@@ -59,18 +63,37 @@ int main(int argc, char **argv) {
           pool_show();
           break;
         case SHUTDOWN:
-          // TODO
-          pool_broadcast(cmd);
+          shutting_down = 1;
+          if (pool_shutdown()) {
+            // NO POOLS ACTIVE
+            goto stop;
+          }
           break;
         case UNKNOWN:
           break;
         }
       } else if (events[i].data.fd == SIG_FILENO) {
-        SignalInfo sig;
-        if (decode_signal(SIG_FILENO, &sig) < 0) {
+        struct signalfd_siginfo siginfo;
+        ssize_t nread =
+            read(SIG_FILENO, &siginfo, sizeof(struct signalfd_siginfo));
+        if (nread < 0) {
           continue;
         }
-        // TODO: Also fix multiple signal decoding (like pools')
+        if (siginfo.ssi_signo == SIGCHLD) {
+          // wait(2)
+          int wstatus;
+          pid_t pid;
+          while ((pid = waitpid(-1, &wstatus,
+                                WUNTRACED | WCONTINUED | WNOHANG)) > 0) {
+            if (WIFEXITED(wstatus)) {
+              // Pool exited
+              if (pool_exited(WEXITSTATUS(wstatus)) && shutting_down) {
+                // ALL POOLS EXITED & SHUTDOWN RECEIVED
+                goto stop;
+              }
+            }
+          }
+        }
       } else {
         // Input from pool process
         pool_redirect(events[i].data.fd);
@@ -78,9 +101,14 @@ int main(int argc, char **argv) {
     }
   }
 
+stop:
+  pool_print_info();
+
   pool_free();
   cmd_free();
   polling_free();
   io_free();
   sig_free();
+
+  return 0;
 }

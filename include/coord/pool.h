@@ -15,5 +15,8 @@ int pool_submit(Command *cmd);
 void pool_broadcast(Command *cmd);
 void pool_show();
 void pool_finished();
+int pool_shutdown();
+int pool_exited(int status);
+void pool_print_info();
 
 #endif

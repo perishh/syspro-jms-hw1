@@ -25,4 +25,6 @@ void job_status_all(int n);
 void job_show_active();
 int job_shutdown();
 
+int get_job_count();
+
 #endif

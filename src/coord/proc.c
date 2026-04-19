@@ -102,7 +102,9 @@ int proc_main(int id) {
       if (cmd != NULL) {
         switch (cmd->action) {
         case SUBMIT:
-          job_add(cmd->data, cmd->args);
+          if (!stop_received) {
+            job_add(cmd->data, cmd->args);
+          }
           break;
         case STATUS:
           job_status(atoi(cmd->args));
@@ -117,10 +119,14 @@ int proc_main(int id) {
           job_show_finished();
           break;
         case SUSPEND:
-          job_suspend(atoi(cmd->args));
+          if (!stop_received) {
+            job_suspend(atoi(cmd->args));
+          }
           break;
         case RESUME:
-          job_resume(atoi(cmd->args));
+          if (!stop_received) {
+            job_resume(atoi(cmd->args));
+          }
           break;
         case SHUTDOWN:
         case SHOW_POOLS:
@@ -131,7 +137,6 @@ int proc_main(int id) {
     }
 
     if (fds[1].revents & POLLIN) {
-
       struct signalfd_siginfo siginfo;
       ssize_t nread =
           read(SIG_FILENO, &siginfo, sizeof(struct signalfd_siginfo));
@@ -152,8 +157,10 @@ int proc_main(int id) {
           } else if (WIFEXITED(wstatus)) {
             job_exited(pid);
             exited++;
-            if (exited == get_jobs_pool()) {
-              sendf("All jobs done I can close\n");
+            if (exited == get_jobs_pool() ||
+                (stop_received && exited == get_job_count())) {
+              // ALL JOBS DONE
+              goto stop;
             }
           }
         }
@@ -162,15 +169,19 @@ int proc_main(int id) {
         if (!stop_received) {
           stop_received = 1;
           in_progress = job_shutdown();
+          if (in_progress == 0) {
+            goto stop;
+          }
         }
       }
     }
   }
 
+stop:
   cmd_free();
   job_free();
   proc_sig_free();
   proc_io_free();
 
-  return 0;
+  return in_progress;
 }

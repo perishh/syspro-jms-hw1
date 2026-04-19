@@ -104,6 +104,8 @@ int job_proc_redirect(int id) {
 static int size;
 static Job *jobs;
 
+int get_job_count() { return size; }
+
 int job_add(int id, char *raw) {
   if (size >= get_jobs_pool()) {
     return -1;
@@ -321,7 +323,6 @@ int job_init() {
 
   return 0;
 }
-
 int job_shutdown() {
   int in_progress = 0;
   for (int i = 0; i < size; i++) {
