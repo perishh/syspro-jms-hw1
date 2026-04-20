@@ -109,9 +109,13 @@ int proc_main(int id) {
         case STATUS:
           job_status(atoi(cmd->args));
           break;
-        case STATUS_ALL:
-          job_status_all(atoi(cmd->args));
-          break;
+        case STATUS_ALL: {
+          int n = 0;
+          if (cmd->len > 0) {
+            n = atoi(cmd->args);
+          }
+          job_status_all(n);
+        } break;
         case SHOW_ACTIVE:
           job_show_active();
           break;

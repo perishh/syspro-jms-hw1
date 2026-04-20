@@ -50,12 +50,12 @@ int main(int argc, char **argv) {
           }
           break;
         case STATUS_ALL:
-          // TODO: FIX BUG WHEN NO ARGUMENT
-          pool_broadcast(cmd);
+          pool_status_all(cmd);
+          break;
+        case STATUS:
+          pool_status(cmd);
           break;
         case SHOW_ACTIVE:
-        case STATUS:
-          // TODO: Break down command to include finished jobs
           pool_broadcast(cmd);
           break;
         case SHOW_FINISHED:

@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "args.h"
@@ -214,6 +215,34 @@ void pool_broadcast(Command *cmd) {
     p = (Pool *)node->data;
     pool_send(cmd, p->id);
   }
+}
+
+void pool_status(Command *cmd) {
+  int id = atoi(cmd->args);
+  FOR_EACH(finished_jobs, node) {
+    Job *j = (Job *)node->data;
+    if (j->id == id) {
+      sendf("JobID %d Status:\tFinished\n", id);
+      break;
+    }
+  }
+}
+
+void pool_status_all(Command *cmd) {
+  int n = 0;
+  if (cmd->len > 0) {
+    n = atoi(cmd->args);
+  }
+  time_t now = time(NULL);
+
+  FOR_EACH(finished_jobs, node) {
+    Job *j = (Job *)node->data;
+    int elapsed = now - j->timestamp;
+    if (n <= 0 || elapsed <= n) {
+      sendf("JobID %d Status:\tFinished\n", j->id);
+    }
+  }
+  pool_broadcast(cmd);
 }
 
 void pool_finished() {

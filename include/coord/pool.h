@@ -18,5 +18,7 @@ void pool_finished();
 int pool_shutdown();
 int pool_exited(int status);
 void pool_print_info();
+void pool_status_all(Command *cmd);
+void pool_status(Command *cmd);
 
 #endif
