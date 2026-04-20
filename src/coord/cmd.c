@@ -27,13 +27,14 @@ Command *cmd_read(int fd) {
   }
 
   if (buffer->action == UNKNOWN) {
-    printf("Unknown command.");
+    printf("Unknown command.\n");
     return NULL;
   }
 
   if (buffer->len == 0) {
     // No arguments given
-    if ((buffer->action & ZERO_ARG_ACTIONS) == 0) {
+    if (buffer->action != STATUS_ALL &&
+        (buffer->action & ZERO_ARG_ACTIONS) == 0) {
       printf("Invalid command\n");
       return NULL;
     }

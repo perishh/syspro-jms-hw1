@@ -116,9 +116,11 @@ int pool_send(const Command *cmd, int id) {
     return -1;
   }
 
-  if (write(out, cmd->args, cmd->len + 1) < 0) {
-    close(out);
-    return -1;
+  if (cmd->len > 0) {
+    if (write(out, cmd->args, cmd->len + 1) < 0) {
+      close(out);
+      return -1;
+    }
   }
 
   return 0;

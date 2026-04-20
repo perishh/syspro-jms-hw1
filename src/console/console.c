@@ -117,7 +117,8 @@ int main(int argc, char **argv) {
     } else {
       // ferror(3)
       // While the is still unread data
-      while(read_commands(ops) > 0) {}
+      while (read_commands(ops) > 0) {
+      }
       fclose(ops);
     }
   }
@@ -209,18 +210,21 @@ int read_commands(FILE *stream) {
 
   ssize_t written;
   // Send command
-  if ((written = write(out, cmd, sizeof(Command))) < (long) sizeof(Command)) {
+  if ((written = write(out, cmd, sizeof(Command))) < (long)sizeof(Command)) {
     if (errno == EPIPE) {
       fprintf(stderr, "Coordinator is no longer running.\n");
     }
     return -1;
   }
-  
-  if ((written = write(out, buffer + action_length_with_null, arg_length_with_null)) < arg_length_with_null) {
-    if (errno == EPIPE) {
-      fprintf(stderr, "Coordinator is no longer running.\n");
+
+  if (cmd->len > 0) {
+    if ((written = write(out, buffer + action_length_with_null,
+                         arg_length_with_null)) < arg_length_with_null) {
+      if (errno == EPIPE) {
+        fprintf(stderr, "Coordinator is no longer running.\n");
+      }
+      return -1;
     }
-    return -1;
   }
 
   return nread;
