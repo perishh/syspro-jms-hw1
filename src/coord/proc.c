@@ -4,7 +4,6 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/poll.h>
 #include <sys/signalfd.h>
 #include <unistd.h>
@@ -159,6 +158,7 @@ int proc_main(int id) {
           } else if (WIFCONTINUED(wstatus)) {
             job_continued(pid);
           } else if (WIFEXITED(wstatus)) {
+            // TODO: Make sure pool doesn't return a positive error code
             job_exited(pid);
             exited++;
             if (exited == get_jobs_pool() ||

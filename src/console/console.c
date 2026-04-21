@@ -88,6 +88,7 @@ int main(int argc, char **argv) {
     } else {
       perror("open (jms_out)");
     }
+    close(out);
     return 1;
   }
 
@@ -112,11 +113,11 @@ int main(int argc, char **argv) {
   if (operations_file != NULL) {
     FILE *ops = fopen(operations_file, "r");
     if (ops == NULL) {
+      // ferror(3)
       perror("fopen");
       // Program can continue
     } else {
-      // ferror(3)
-      // While the is still unread data
+      // While there still is unread data
       while (read_commands(ops) > 0) {
       }
       fclose(ops);
@@ -165,7 +166,7 @@ int redirect(int fromfd, int tofd) {
 }
 
 int read_commands(FILE *stream) {
-  // Potentially unsafe to write more than PIPE_BUF at once
+  // TODO: Potentially unsafe to write more than PIPE_BUF at once
   ssize_t nread = getline(&buffer, &buffer_size, stream);
   if (nread <= 0) {
     // ferror(3)
