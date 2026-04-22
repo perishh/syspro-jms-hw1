@@ -50,15 +50,15 @@ if [[ "$COMMAND" != "size" && -n "$SIZE" ]]; then
   exit 1
 fi
 
-DIRS="$(find "$WORKDIR" -mindepth 1 -maxdepth 1 -type d)"
+DIRS="$(find "$WORKDIR" -mindepth 1 -maxdepth 1 -type d | grep -E 'outputs_[0-9]*_[0-9]*_[0-9]*_[0-9]*$')"
 case "$COMMAND" in
   "list")
-    echo "$DIRS"
+    sed -E 's|(.*)/(outputs_[0-9]*_[0-9]*_[0-9]*_[0-9]*)$|Directory: \2|' <<< "$DIRS"
     ;;
   "size")
     count=1
     while IFS= read -r i; do
-      du -sh "$i" | sort -h | sed -E 's/(.*)\t(.*)/Directory: \2\tSize: \1/'
+      du -sh "$i" | sort -h | sed -E 's|(.*)\t.*/(outputs_[0-9]*_[0-9]*_[0-9]*_[0-9]*)$|Directory: \2\tSize: \1|'
       if [[ -n "$SIZE" && $count -ge "$SIZE" ]]; then
         break
       fi
