@@ -56,9 +56,13 @@ case "$COMMAND" in
     echo "$DIRS"
     ;;
   "size")
-    # TODO: HANDLE ARGUMENT
+    count=1
     while IFS= read -r i; do
       du -sh "$i" | sort -h | sed -E 's/(.*)\t(.*)/Directory: \2\tSize: \1/'
+      if [[ -n "$SIZE" && $count -ge "$SIZE" ]]; then
+        break
+      fi
+      ((count++))
     done <<< "$DIRS"
     ;;
   "purge")
