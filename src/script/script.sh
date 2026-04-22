@@ -56,6 +56,7 @@ case "$COMMAND" in
     echo "$DIRS"
     ;;
   "size")
+    # TODO: HANDLE ARGUMENT
     while IFS= read -r i; do
       du -sh "$i" | sort -h | sed -E 's/(.*)\t(.*)/Directory: \2\tSize: \1/'
     done <<< "$DIRS"

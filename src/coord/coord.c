@@ -104,6 +104,12 @@ int main(int argc, char **argv) {
   }
 
 stop:
+
+{
+  char eot = 0x04;
+  write(JMSOUT_FILENO, &eot, 1);
+}
+
   pool_print_info();
 
   pool_free();

@@ -140,7 +140,9 @@ int main(int argc, char **argv) {
         }
       }
       if (fds[1].revents & POLLIN) {
-        redirect(in, STDOUT_FILENO);
+        if (redirect(in, STDOUT_FILENO) == -2) {
+          break;
+        }
       }
     } else {
       perror("poll");
@@ -159,6 +161,9 @@ int main(int argc, char **argv) {
 int redirect(int fromfd, int tofd) {
   ssize_t nread;
   while ((nread = read(fromfd, buffer, buffer_size)) > 0) {
+    if (buffer[0] == 0x04) {
+      return -2;
+    }
     write(tofd, buffer, nread);
   }
 
