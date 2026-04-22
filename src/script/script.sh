@@ -60,6 +60,9 @@ case "$COMMAND" in
       du -sh "$i" | sort -h | sed -E 's/(.*)\t(.*)/Directory: \2\tSize: \1/'
     done <<< "$DIRS"
     ;;
+  "purge")
+    echo "$DIRS" | xargs -d '\n' rm -rf
+    ;;
   *)
     ;;
 esac
