@@ -222,7 +222,11 @@ void pool_status(Command *cmd) {
   FOR_EACH(finished_jobs, node) {
     Job *j = (Job *)node->data;
     if (j->id == id) {
-      sendf("JobID %d Status:\tFinished\n", id);
+      int size =
+          snprintf(buffer, buffer_size, "JobID %d Status:\tFinished\n", id);
+      if (size < buffer_size) {
+        write(JMSOUT_FILENO, buffer, size + 1);
+      }
       break;
     }
   }
@@ -239,7 +243,11 @@ void pool_status_all(Command *cmd) {
     Job *j = (Job *)node->data;
     int elapsed = now - j->timestamp;
     if (n <= 0 || elapsed <= n) {
-      sendf("JobID %d Status:\tFinished\n", j->id);
+      int size =
+          snprintf(buffer, buffer_size, "JobID %d Status:\tFinished\n", j->id);
+      if (size < buffer_size) {
+        write(JMSOUT_FILENO, buffer, size + 1);
+      }
     }
   }
   pool_broadcast(cmd);

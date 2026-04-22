@@ -49,3 +49,17 @@ if [[ "$COMMAND" != "size" && -n "$SIZE" ]]; then
   echo "Invalid argument"
   exit 1
 fi
+
+DIRS="$(find "$WORKDIR" -mindepth 1 -maxdepth 1 -type d)"
+case "$COMMAND" in
+  "list")
+    echo "$DIRS"
+    ;;
+  "size")
+    while IFS= read -r i; do
+      du -sh "$i" | sort -h | sed -E 's/(.*)\t(.*)/Directory: \2\tSize: \1/'
+    done <<< "$DIRS"
+    ;;
+  *)
+    ;;
+esac

@@ -187,11 +187,9 @@ int job_status(int id) {
     return -1;
   }
 
-  if (j->finished) {
-    sendf("JobID %d Status:\tFinished\n", id);
-  } else if (j->suspended) {
+  if (j->suspended) {
     sendf("JobID %d Status:\tSuspended\n", id);
-  } else {
+  } else if (!j->finished) {
     time_t now = time(NULL);
     int elapsed = now - (j->timestamp);
     sendf("JobID %d Status:\tActive (running for %d sec)\n", id, elapsed);
@@ -207,11 +205,9 @@ void job_status_all(int n) {
     Job *j = &jobs[i];
     int elapsed = now - j->timestamp;
     if (n <= 0 || elapsed <= n) {
-      if (j->finished) {
-        sendf("JobID %d Status:\tFinished\n", j->id);
-      } else if (j->suspended) {
+      if (j->suspended) {
         sendf("JobID %d Status:\tSuspended\n", j->id);
-      } else {
+      } else if (!j->finished) {
         sendf("JobID %d Status:\tActive (running for %d sec)\n", j->id,
               elapsed);
       }
