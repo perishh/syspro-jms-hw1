@@ -7,11 +7,11 @@
 #define MAX_EVENTS 10
 
 int EPOLL_FILENO;
-struct epoll_event *_events;
+struct epoll_event *eevents;
 
 int polling_init() {
-  _events = malloc(sizeof(struct epoll_event) * MAX_EVENTS);
-  if(_events == NULL) {
+  eevents = malloc(sizeof(struct epoll_event) * MAX_EVENTS);
+  if (eevents == NULL) {
     return -1;
   }
 
@@ -19,7 +19,7 @@ int polling_init() {
   EPOLL_FILENO = epoll_create1(EPOLL_CLOEXEC);
   if (EPOLL_FILENO < 0) {
     perror("epoll_create");
-    free(_events);
+    free(eevents);
     return -1;
   }
 
@@ -42,11 +42,11 @@ int polling_remove(int fd) {
 }
 
 int polling_wait(struct epoll_event **events) {
-  *events = _events;
-  return epoll_wait(EPOLL_FILENO, _events, MAX_EVENTS, -1);
+  *events = eevents;
+  return epoll_wait(EPOLL_FILENO, eevents, MAX_EVENTS, -1);
 }
 
 void polling_free() {
   close(EPOLL_FILENO);
-  free(_events);
+  free(eevents);
 }

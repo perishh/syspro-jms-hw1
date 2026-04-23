@@ -24,10 +24,8 @@ int job_proc_cd(int id, time_t timestamp) {
   pid_t pid = getpid();
 
   // printf(3)
-  int base;
-  if ((base = snprintf(buffer, 64 - DATETIME_SIZE, "outputs_%d_%d_", id,
-                       pid)) >= 64 - DATETIME_SIZE ||
-      base < 0) {
+  int base = snprintf(buffer, 64 - DATETIME_SIZE, "outputs_%d_%d_", id, pid);
+  if (base >= 64 - DATETIME_SIZE || base < 0) {
     free(buffer);
     return -1;
   }
@@ -191,8 +189,8 @@ int job_status(int id) {
     sendf("JobID %d Status:\tSuspended\n", id);
   } else if (!j->finished) {
     time_t now = time(NULL);
-    int elapsed = now - (j->timestamp);
-    sendf("JobID %d Status:\tActive (running for %d sec)\n", id, elapsed);
+    long elapsed = now - (j->timestamp);
+    sendf("JobID %d Status:\tActive (running for %ld sec)\n", id, elapsed);
   }
 
   return 0;
@@ -203,12 +201,12 @@ void job_status_all(int n) {
 
   for (int i = 0; i < size; i++) {
     Job *j = &jobs[i];
-    int elapsed = now - j->timestamp;
+    long elapsed = now - j->timestamp;
     if (n <= 0 || elapsed <= n) {
       if (j->suspended) {
         sendf("JobID %d Status:\tSuspended\n", j->id);
       } else if (!j->finished) {
-        sendf("JobID %d Status:\tActive (running for %d sec)\n", j->id,
+        sendf("JobID %d Status:\tActive (running for %ld sec)\n", j->id,
               elapsed);
       }
     }

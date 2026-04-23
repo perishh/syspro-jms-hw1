@@ -8,7 +8,7 @@
 #include "utils.h"
 
 static Command *buffer;
-int buffer_size;
+unsigned long buffer_size;
 
 int cmd_init() {
   buffer = malloc(sizeof(Command));
@@ -42,7 +42,7 @@ Command *cmd_read(int fd) {
   }
 
   // Check current buffer size and expand if needed
-  ssize_t required_space = sizeof(Command) + buffer->len + 1; // \0
+  unsigned long required_space = sizeof(Command) + buffer->len + 1; // \0
   if (buffer_size < required_space) {
     // TODO: CHECK STATIC MEMBERS FOR INVALID DATA WHEN FORKING
     Command *temp = realloc(buffer, required_space);

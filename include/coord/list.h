@@ -12,7 +12,7 @@ typedef struct {
 } LinkedList;
 
 void ll_init(LinkedList *l);
-int ll_push(LinkedList *l, const void *data);
+int ll_push(LinkedList *l, void *data);
 void ll_free(LinkedList *l);
 
 #define FOR_EACH(list, node)                                                   \

@@ -23,8 +23,8 @@ char *buffer = NULL;
 size_t buffer_size = 0;
 
 Action parse_action(const char *cmd);
-int read_commands(FILE *stream);
-int redirect(int fromfd, int tofd);
+long read_commands(FILE *stream);
+long redirect(int fromfd, int tofd);
 
 int main(int argc, char **argv) {
   // Ignore SIGPIPE to prevent crashing when writing to closed pipe
@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
         operations_file = argv[optind++];
         break;
       }
-      [[fallthrough]];
+      /* fallthrough */
     default:
       // Empty or unknown argument
       print_usage();
@@ -158,7 +158,7 @@ int main(int argc, char **argv) {
   return 0;
 }
 
-int redirect(int fromfd, int tofd) {
+long redirect(int fromfd, int tofd) {
   ssize_t nread;
   while ((nread = read(fromfd, buffer, buffer_size)) > 0) {
     if (buffer[0] == 0x04) {
@@ -170,7 +170,7 @@ int redirect(int fromfd, int tofd) {
   return nread;
 }
 
-int read_commands(FILE *stream) {
+long read_commands(FILE *stream) {
   // TODO: Potentially unsafe to write more than PIPE_BUF at once
   ssize_t nread = getline(&buffer, &buffer_size, stream);
   if (nread <= 0) {
@@ -195,7 +195,7 @@ int read_commands(FILE *stream) {
   }
 
   ssize_t arg_length_with_null = 0;
-  ssize_t action_length_with_null = strlen(action) + 1;
+  ssize_t action_length_with_null = ((long)strlen(action)) + 1;
 
   if ((cmd->action & ZERO_ARG_ACTIONS) != 0) {
     if (nread > action_length_with_null) {
@@ -211,12 +211,12 @@ int read_commands(FILE *stream) {
     }
 
     arg_length_with_null = nread - action_length_with_null + 1;
-    cmd->len = arg_length_with_null - 1;
+    cmd->len = (int)arg_length_with_null - 1;
   }
 
-  ssize_t written;
   // Send command
-  if ((written = write(out, cmd, sizeof(Command))) < (long)sizeof(Command)) {
+  ssize_t written = write(out, cmd, sizeof(Command));
+  if (written < (long)sizeof(Command)) {
     if (errno == EPIPE) {
       fprintf(stderr, "Coordinator is no longer running.\n");
     }
@@ -224,8 +224,9 @@ int read_commands(FILE *stream) {
   }
 
   if (cmd->len > 0) {
-    if ((written = write(out, buffer + action_length_with_null,
-                         arg_length_with_null)) < arg_length_with_null) {
+    written =
+        write(out, buffer + action_length_with_null, arg_length_with_null);
+    if (written < arg_length_with_null) {
       if (errno == EPIPE) {
         fprintf(stderr, "Coordinator is no longer running.\n");
       }

@@ -10,7 +10,7 @@ typedef struct {
   pid_t pid;
 } SignalInfo;
 
-ssize_t read_blocking(int __fd, void *__buf, size_t __nbytes);
+ssize_t read_blocking(int _fd, void *_buf, size_t _nbytes);
 int count_words(const char *args);
 int decode_args(char *raw, char **argv);
 int decode_signal(int fd, SignalInfo *info);

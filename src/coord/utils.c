@@ -7,10 +7,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-ssize_t read_blocking(int __fd, void *__buf, size_t __nbytes) {
+ssize_t read_blocking(int _fd, void *_buf, size_t _nbytes) {
   // poll(2)
   struct pollfd pfd;
-  pfd.fd = __fd;
+  pfd.fd = _fd;
   pfd.events = POLLIN;
 
   int ret = poll(&pfd, 1, -1);
@@ -18,7 +18,7 @@ ssize_t read_blocking(int __fd, void *__buf, size_t __nbytes) {
     return ret;
   }
 
-  return read(__fd, __buf, __nbytes);
+  return read(_fd, _buf, _nbytes);
 }
 
 // Delimiter is Space or \n (or NULL)
@@ -66,11 +66,11 @@ int decode_signal(int fd, SignalInfo *info) {
   if (siginfo.ssi_signo == SIGCHLD) {
     // wait(2)
     int wstatus;
-    if (waitpid(siginfo.ssi_pid, &wstatus, WUNTRACED | WCONTINUED) < 0) {
+    if (waitpid((int)siginfo.ssi_pid, &wstatus, WUNTRACED | WCONTINUED) < 0) {
       return -1;
     }
 
-    info->pid = siginfo.ssi_pid;
+    info->pid = (int)siginfo.ssi_pid;
     if (WIFSTOPPED(wstatus)) {
       info->cause = STOPPED;
     } else if (WIFCONTINUED(wstatus)) {

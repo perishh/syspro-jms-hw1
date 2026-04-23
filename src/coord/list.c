@@ -7,7 +7,7 @@ void ll_init(LinkedList *l) {
   l->size = 0;
 }
 
-int ll_push(LinkedList *l, const void *data) {
+int ll_push(LinkedList *l, void *data) {
   Node *node = malloc(sizeof(Node));
   if (node == NULL) {
     return -1;

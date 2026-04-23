@@ -33,7 +33,7 @@ static ssize_t buffer_size;
 
 LinkedList finished_jobs;
 
-int pool_redirect(int fd) {
+long pool_redirect(int fd) {
   static PoolMessage msg;
   ssize_t nread = read(fd, &msg, sizeof(PoolMessage));
   if (nread != sizeof(PoolMessage)) {
@@ -241,7 +241,7 @@ void pool_status_all(Command *cmd) {
 
   FOR_EACH(finished_jobs, node) {
     Job *j = (Job *)node->data;
-    int elapsed = now - j->timestamp;
+    long elapsed = now - j->timestamp;
     if (n <= 0 || elapsed <= n) {
       int size =
           snprintf(buffer, buffer_size, "JobID %d Status:\tFinished\n", j->id);
