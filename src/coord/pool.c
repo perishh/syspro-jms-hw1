@@ -25,6 +25,7 @@
 typedef struct {
   int id;
   pid_t pid;
+  int fd;
   int jobs;
 } Pool;
 
@@ -100,7 +101,7 @@ int pool_io_init(int id) {
     return -1;
   }
 
-  return 0;
+  return in;
 }
 
 int pool_send(const Command *cmd, int id) {
@@ -139,8 +140,12 @@ int pool_start() {
 
   pool->id = pool_key++;
   pool->jobs = 0;
+  pool->fd = pool_io_init(pool->id);
 
-  pool_io_init(pool->id);
+  if (pool->fd < 0) {
+    free(pool);
+    return -1;
+  }
 
   pool->pid = fork();
   if (pool->pid == 0) {
@@ -281,7 +286,26 @@ void pool_show() {
 int total_exited = 0;
 int total_in_progress = 0;
 
-int pool_exited(int status) {
+int pool_exited(pid_t pid, int status) {
+  int id = -1;
+  FOR_EACH(pools, node) {
+    Pool *p = (Pool *)node->data;
+    if (p->pid == pid) {
+      id = p->id;
+      polling_remove(p->fd);
+      close(p->fd);
+      break;
+    }
+  }
+
+  if (id > 0) {
+    char str[32];
+    sprintf(str, "pool_%d_in", id);
+    unlink(str);
+    sprintf(str, "pool_%d_out", id);
+    unlink(str);
+  }
+
   total_exited++;
   if (status > 0) {
     total_in_progress += status;

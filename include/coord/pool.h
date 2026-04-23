@@ -2,6 +2,7 @@
 #define POOL_H
 
 #include "command.h"
+#include <fcntl.h>
 
 typedef struct {
   int isText;
@@ -16,7 +17,7 @@ void pool_broadcast(Command *cmd);
 void pool_show();
 void pool_finished();
 int pool_shutdown();
-int pool_exited(int status);
+int pool_exited(pid_t pid, int status);
 void pool_print_info();
 void pool_status_all(Command *cmd);
 void pool_status(Command *cmd);

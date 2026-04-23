@@ -14,20 +14,51 @@
 #include "sig.h"
 
 int main(int argc, char **argv) {
-  args_init(argc, argv);
-  cmd_init();
-  polling_init();
-  io_init();
-  sig_init();
-  pool_init();
+  if (args_init(argc, argv) < 0) {
+    return 1;
+  }
+
+  if (cmd_init() < 0) {
+    return 1;
+  }
+
+  if (polling_init() < 0) {
+    cmd_free();
+    return 1;
+  }
+
+  if (io_init() < 0) {
+    cmd_free();
+    polling_free();
+    return 1;
+  }
+
+  if (sig_init() < 0) {
+    cmd_free();
+    polling_free();
+    io_close();
+    io_free();
+    return 1;
+  }
+
+  if (pool_init() < 0) {
+    cmd_free();
+    polling_free();
+    io_close();
+    io_free();
+    sig_free();
+    return 1;
+  }
 
   int shutting_down = 0;
+  int status = 0;
 
   struct epoll_event *events;
   for (;;) {
     int count = polling_wait(&events);
     if (count < 0) {
-      // TODO
+      status = 1;
+      break;
     }
 
     for (int i = 0; i < count; i++) {
@@ -89,11 +120,17 @@ int main(int argc, char **argv) {
                                 WUNTRACED | WCONTINUED | WNOHANG)) > 0) {
             if (WIFEXITED(wstatus)) {
               // Pool exited
-              if (pool_exited(WEXITSTATUS(wstatus)) && shutting_down) {
+              if (pool_exited(pid, WEXITSTATUS(wstatus)) && shutting_down) {
                 // ALL POOLS EXITED & SHUTDOWN RECEIVED
                 goto stop;
               }
             }
+          }
+        } else {
+          shutting_down = 1;
+          if (pool_shutdown()) {
+            // NO POOLS ACTIVE
+            goto stop;
           }
         }
       } else {
@@ -105,12 +142,12 @@ int main(int argc, char **argv) {
 
 stop:
 
-{
-  char eot = 0x04;
-  write(JMSOUT_FILENO, &eot, 1);
-}
-
   pool_print_info();
+
+  {
+    char eot = 0x04;
+    write(JMSOUT_FILENO, &eot, 1);
+  }
 
   pool_free();
   cmd_free();
@@ -119,5 +156,5 @@ stop:
   io_free();
   sig_free();
 
-  return 0;
+  return status;
 }

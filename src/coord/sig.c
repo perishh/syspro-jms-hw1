@@ -11,7 +11,8 @@ int SIG_FILENO;
 int sig_init() {
   // sigsetops(3)
   sigset_t signals;
-  if (sigemptyset(&signals) < 0 || sigaddset(&signals, SIGCHLD) < 0) {
+  if (sigemptyset(&signals) < 0 || sigaddset(&signals, SIGCHLD) < 0 ||
+      sigaddset(&signals, SIGINT) < 0 || sigaddset(&signals, SIGTERM) < 0) {
     return -1;
   }
 
@@ -33,7 +34,5 @@ int sig_init() {
 
   return 0;
 }
-
-
 
 void sig_free() { close(SIG_FILENO); }
