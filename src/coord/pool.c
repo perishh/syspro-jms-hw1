@@ -224,6 +224,7 @@ void pool_broadcast(Command *cmd) {
 
 void pool_status(Command *cmd) {
   int id = atoi(cmd->args);
+  int found = 0;
   FOR_EACH(finished_jobs, node) {
     Job *j = (Job *)node->data;
     if (j->id == id) {
@@ -232,8 +233,12 @@ void pool_status(Command *cmd) {
       if (size < buffer_size) {
         write(JMSOUT_FILENO, buffer, size + 1);
       }
+      found = 1;
       break;
     }
+  }
+  if (!found) {
+    pool_broadcast(cmd);
   }
 }
 
@@ -283,38 +288,42 @@ void pool_show() {
   }
 }
 
-int total_exited = 0;
+// int total_exited = 0;
 int total_in_progress = 0;
 
 int pool_exited(pid_t pid, int status) {
-  int id = -1;
+  Node *n = NULL;
   FOR_EACH(pools, node) {
     Pool *p = (Pool *)node->data;
     if (p->pid == pid) {
-      id = p->id;
-      polling_remove(p->fd);
-      close(p->fd);
+      n = node;
       break;
     }
   }
 
-  if (id > 0) {
+  if (n != NULL) {
+    Pool *p = (Pool *)n->data;
+    polling_remove(p->fd);
+    close(p->fd);
+
     char str[32];
-    sprintf(str, "pool_%d_in", id);
+    sprintf(str, "pool_%d_in", p->id);
     unlink(str);
-    sprintf(str, "pool_%d_out", id);
+    sprintf(str, "pool_%d_out", p->id);
     unlink(str);
+
+    free(p);
+    ll_remove(&pools, n);
   }
 
-  total_exited++;
   if (status > 0) {
     total_in_progress += status;
   }
-  return total_exited == pools.size;
+  return pools.size == 0;
 }
 
 int pool_shutdown() {
-  if (total_exited == pools.size) {
+  if (pools.size == 0) {
     // NO POOLS ACTIVE
     return 1;
   }

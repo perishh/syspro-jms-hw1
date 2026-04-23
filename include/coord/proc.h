@@ -28,6 +28,11 @@ extern FILE *pipeout;
     fflush(pipeout);                                                           \
   }
 
+/**
+ * @brief Main entry point of the pool process
+ * @param id id of the process
+ * @return pool process exit status
+ */
 int proc_main(int id);
 
 #endif

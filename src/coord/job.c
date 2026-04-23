@@ -317,6 +317,7 @@ int job_init() {
 
   return 0;
 }
+
 int job_shutdown() {
   int in_progress = 0;
   for (int i = 0; i < size; i++) {

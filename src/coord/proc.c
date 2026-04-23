@@ -72,10 +72,28 @@ static int exited = 0;
 
 int proc_main(int id) {
   POOL_ID = id;
-  proc_io_init();
-  proc_sig_init();
-  job_init();
-  cmd_init(); // TODO: Check if causes issues
+
+  if (proc_io_init() < 0) {
+    return 0;
+  }
+
+  if (proc_sig_init() < 0) {
+    proc_io_free();
+    return 0;
+  }
+
+  if (job_init() < 0) {
+    proc_io_free();
+    proc_sig_free();
+    return 0;
+  }
+
+  if (cmd_init() < 0) {
+    proc_io_free();
+    proc_sig_free();
+    job_free();
+    return 0;
+  }
 
   struct pollfd fds[2];
   fds[0].fd = PIPEIN_FILENO;
@@ -86,13 +104,10 @@ int proc_main(int id) {
   int stop_received = 0;
   int in_progress = 0;
 
-  // TODO: Handle stop received
-
   for (;;) {
     int ret = poll(fds, 2, -1);
     if (ret <= 0) {
-      // TODO
-      // continue;
+      break;
     }
 
     if (fds[0].revents & POLLIN) {
@@ -158,7 +173,6 @@ int proc_main(int id) {
           } else if (WIFCONTINUED(wstatus)) {
             job_continued(pid);
           } else if (WIFEXITED(wstatus)) {
-            // TODO: Make sure pool doesn't return a positive error code
             job_exited(pid);
             exited++;
             if (exited == get_jobs_pool() ||

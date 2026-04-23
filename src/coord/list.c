@@ -33,3 +33,29 @@ void ll_free(LinkedList *l) {
   }
   l->size = 0;
 }
+
+int ll_remove(LinkedList *l, Node *node) {
+  // Node in front
+  if (l->front == node) {
+    l->front = node->next;
+    free(node);
+    l->size--;
+    return 0;
+  }
+
+  // Find previous node
+  Node *current = l->front;
+  while (current->next != NULL && current->next != node) {
+    current = current->next;
+  }
+
+  // Node not found
+  if (current->next == NULL) {
+    return -1;
+  }
+
+  current->next = node->next;
+  free(node);
+  l->size--;
+  return 0;
+}

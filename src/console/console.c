@@ -79,8 +79,6 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // TODO: Might need to open RW
-
   int in = open(jms_out, O_RDONLY | O_NONBLOCK);
   if (in < 0) {
     if (errno == ENXIO) {
@@ -171,7 +169,6 @@ long redirect(int fromfd, int tofd) {
 }
 
 long read_commands(FILE *stream) {
-  // TODO: Potentially unsafe to write more than PIPE_BUF at once
   ssize_t nread = getline(&buffer, &buffer_size, stream);
   if (nread <= 0) {
     // ferror(3)
