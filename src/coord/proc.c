@@ -102,7 +102,6 @@ int proc_main(int id) {
   fds[1].events = POLLIN;
 
   int stop_received = 0;
-  int in_progress = 0;
 
   for (;;) {
     int ret = poll(fds, 2, -1);
@@ -186,8 +185,7 @@ int proc_main(int id) {
         // Graceful shutdown
         if (!stop_received) {
           stop_received = 1;
-          in_progress = job_shutdown();
-          if (in_progress == 0) {
+          if (job_shutdown() == 0) {
             goto stop;
           }
         }
@@ -201,5 +199,5 @@ stop:
   proc_sig_free();
   proc_io_free();
 
-  return in_progress;
+  return 0;
 }

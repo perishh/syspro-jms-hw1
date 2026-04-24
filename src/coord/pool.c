@@ -289,9 +289,9 @@ void pool_show() {
 }
 
 // int total_exited = 0;
-int total_in_progress = 0;
+int in_progress_at_shutdown = 0;
 
-int pool_exited(pid_t pid, int status) {
+int pool_exited(pid_t pid) {
   Node *n = NULL;
   FOR_EACH(pools, node) {
     Pool *p = (Pool *)node->data;
@@ -315,10 +315,6 @@ int pool_exited(pid_t pid, int status) {
     free(p);
     ll_remove(&pools, n);
   }
-
-  if (status > 0) {
-    total_in_progress += status;
-  }
   return pools.size == 0;
 }
 
@@ -327,6 +323,7 @@ int pool_shutdown() {
     // NO POOLS ACTIVE
     return 1;
   }
+  in_progress_at_shutdown = job_key - finished_jobs.size - 1;
   FOR_EACH(pools, node) {
     Pool *p = (Pool *)node->data;
     kill(p->pid, SIGTERM);
@@ -337,7 +334,7 @@ int pool_shutdown() {
 void pool_print_info() {
   int n = snprintf(buffer, buffer_size,
                    "Served %d jobs, %d were still in progress\n",
-                   finished_jobs.size, total_in_progress);
+                   finished_jobs.size, in_progress_at_shutdown);
   if (n < buffer_size) {
     write(JMSOUT_FILENO, buffer, n + 1); // For \0
   }

@@ -73,10 +73,9 @@ int pool_shutdown();
 /**
  * @brief Updates pool status to exited, cleans up
  * @param pid pool process id
- * @param status pool exit status (jobs in progress)
  * @return 1 if no pools are active, 0 otherwise
  */
-int pool_exited(pid_t pid, int status);
+int pool_exited(pid_t pid);
 
 /**
  * @brief Prints total job count, and job in progress count

@@ -120,7 +120,7 @@ int main(int argc, char **argv) {
                                 WUNTRACED | WCONTINUED | WNOHANG)) > 0) {
             if (WIFEXITED(wstatus)) {
               // Pool exited
-              if (pool_exited(pid, WEXITSTATUS(wstatus)) && shutting_down) {
+              if (pool_exited(pid) && shutting_down) {
                 // ALL POOLS EXITED & SHUTDOWN RECEIVED
                 goto stop;
               }
