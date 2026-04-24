@@ -159,7 +159,7 @@ int main(int argc, char **argv) {
 long redirect(int fromfd, int tofd) {
   ssize_t nread;
   while ((nread = read(fromfd, buffer, buffer_size)) > 0) {
-    if (buffer[0] == 0x04) {
+    if (buffer[0] == 0x04 || buffer[nread - 1] == 0x04) {
       return -2;
     }
     write(tofd, buffer, nread);
