@@ -37,6 +37,10 @@ build/
 
 Το default target (all) "χτίζει" και τα 3 προγράμματα.
 
+Επομένως με `make` παράγονται τα εξής εκτελέσιμα:
+- build/bin/jms_console
+- build/bin/jms_coord
+- build/bin/jms_script.sh
 
 Console
 
