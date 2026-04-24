@@ -27,7 +27,6 @@ Command *cmd_read(int fd) {
   }
 
   if (buffer->action == UNKNOWN) {
-    printf("Unknown command.\n");
     return NULL;
   }
 
@@ -35,7 +34,6 @@ Command *cmd_read(int fd) {
     // No arguments given
     if (buffer->action != STATUS_ALL &&
         (buffer->action & ZERO_ARG_ACTIONS) == 0) {
-      printf("Invalid command\n");
       return NULL;
     }
     return buffer;

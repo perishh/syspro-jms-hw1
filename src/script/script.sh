@@ -1,5 +1,11 @@
 #! /bin/bash
 
+print_usage() {
+  echo "Usage: $0 -l <path> -c <command> [argument]"
+  echo "Available commands: list, size [n], purge"
+  exit 1
+}
+
 WORKDIR=""
 COMMAND=""
 SIZE=""
@@ -23,16 +29,13 @@ while [[ $# -gt 0 ]]; do
       fi
       ;;
     *)
-      # TODO: Print usage
-      echo "Invalid argument"
-      exit 1
+      print_usage
       ;;
   esac
 done
 
 if [[ -z "$WORKDIR" || -z "$COMMAND" ]]; then
-  echo "Invalid arguments"
-  exit 1
+  print_usage
 fi
 
 if [[ ! -d "$WORKDIR" ]]; then
@@ -42,12 +45,12 @@ fi
 
 if [[ "$COMMAND" != "list" && "$COMMAND" != "size" && "$COMMAND" != "purge" ]]; then
   echo "Invalid command"
-  exit 1
+  print_usage
 fi
 
 if [[ "$COMMAND" != "size" && -n "$SIZE" ]]; then
   echo "Invalid argument"
-  exit 1
+  print_usage
 fi
 
 DIRS="$(find "$WORKDIR" -mindepth 1 -maxdepth 1 -type d | grep -E 'outputs_[0-9]*_[0-9]*_[0-9]*_[0-9]*$')"
